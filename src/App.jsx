@@ -100,7 +100,7 @@ const label = { fontSize: 13, fontWeight: 700, color: C.muted };
 // =====================================================================
 function Identify({ slug, onAuth }) {
   useGlacierFonts();
-  const [f, setF] = useState({ nom: "", email: "", date_arrivee: "" });
+  const [f, setF] = useState({ nom: "", email: "", date_arrivee: "", date_depart: "" });
   const [rgpd, setRgpd] = useState(false);
   const [mkt, setMkt] = useState(false);
   const [err, setErr] = useState("");
@@ -114,7 +114,7 @@ function Identify({ slug, onAuth }) {
       return;
     }
     const r = await post("identify", {
-      slug, nom: f.nom, email: f.email, date_arrivee: f.date_arrivee,
+      slug, nom: f.nom, email: f.email, date_arrivee: f.date_arrivee, date_depart: f.date_depart,
       consent_rgpd: rgpd, consent_marketing: mkt,
     });
     setLoading(false);
@@ -125,13 +125,15 @@ function Identify({ slug, onAuth }) {
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 420, width: "100%" }}>
         <h1 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 24, marginBottom: 4, letterSpacing: "-.5px" }}>Bienvenue</h1>
-        <p style={{ color: C.muted, marginTop: 0 }}>Identifiez votre séjour pour accéder à votre espace.</p>
+        <p style={{ color: C.muted, marginTop: 0 }}>Renseignez votre séjour pour accéder à votre espace.</p>
         <Card>
           <label style={label}>Nom<input style={inp} value={f.nom} onChange={(e) => setF({ ...f, nom: e.target.value })} /></label>
           <div style={{ height: 12 }} />
           <label style={label}>Email<input style={inp} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
           <div style={{ height: 12 }} />
           <label style={label}>Date d'arrivée<input style={inp} type="date" value={f.date_arrivee} onChange={(e) => setF({ ...f, date_arrivee: e.target.value })} /></label>
+          <div style={{ height: 12 }} />
+          <label style={label}>Date de départ<input style={inp} type="date" value={f.date_depart} onChange={(e) => setF({ ...f, date_depart: e.target.value })} /></label>
           <div style={{ height: 16 }} />
           <label style={{ display: "flex", gap: 8, fontSize: 13, color: C.text, alignItems: "flex-start" }}>
             <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} style={{ marginTop: 3 }} />
@@ -144,8 +146,8 @@ function Identify({ slug, onAuth }) {
           </label>
           {err && <p style={{ color: C.bad, fontSize: 14 }}>{err}</p>}
           <div style={{ height: 14 }} />
-          <button style={btn()} disabled={loading || !rgpd} onClick={submit}>
-            {loading ? "Vérification…" : "Accéder à mon espace"}
+          <button style={btn()} disabled={loading || !rgpd || !f.nom.trim() || !f.email.trim() || !f.date_arrivee} onClick={submit}>
+            {loading ? "Création de votre espace…" : "Accéder à mon espace"}
           </button>
         </Card>
       </div>
