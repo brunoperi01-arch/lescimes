@@ -4,12 +4,25 @@ import { useState, useEffect, useRef } from "react";
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
 const FN = "https://TON-PROJET.supabase.co/functions/v1";
-const post = (name, body) =>
-  fetch(`${FN}/${name}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }).then((r) => r.json());
+const post = async (name, body) => {
+  try {
+    const r = await fetch(`${FN}/${name}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    // Si la réponse n'est pas du JSON (ex. erreur 500 HTML, fonction absente)
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { return { error: `Réponse inattendue du serveur (HTTP ${r.status}). Vérifiez que la fonction « ${name} » est déployée et que l'URL Supabase est correcte.` }; }
+    if (!r.ok && !data.error) return { error: `Erreur serveur (HTTP ${r.status}).` };
+    return data;
+  } catch (e) {
+    // Erreur réseau / CORS / URL injoignable
+    return { error: `Connexion impossible au serveur. Vérifiez l'URL Supabase (FN) et le déploiement de la fonction. Détail : ${e.message}` };
+  }
+};
 
 // Thème Glacier (identique à la landing : #0f5b6b, accent orangé #f2a65a)
 const C = {
@@ -95,12 +108,17 @@ function Identify({ slug, onAuth }) {
 
   const submit = async () => {
     setErr(""); setLoading(true);
+    if (!slug) {
+      setLoading(false);
+      setErr("Aucun appartement identifié dans l'adresse. Scannez le QR code de votre logement (adresse de type /a/votre-appartement).");
+      return;
+    }
     const r = await post("identify", {
       slug, nom: f.nom, email: f.email, date_arrivee: f.date_arrivee,
       consent_rgpd: rgpd, consent_marketing: mkt,
     });
     setLoading(false);
-    if (r.token) onAuth(r.token); else setErr(r.error || "Erreur");
+    if (r.token) onAuth(r.token); else setErr(r.error || "Erreur inconnue.");
   };
 
   return (
