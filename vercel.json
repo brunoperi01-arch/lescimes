@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/confidentialite", "destination": "/confidentialite.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/a/:path*", "destination": "/index.html" }
+  ]
+}
