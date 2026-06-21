@@ -6,7 +6,9 @@ import { createClient } from "@supabase/supabase-js";
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
 const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
+
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
+
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -147,7 +149,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}` }}>
-        {[["kpi", "Indicateurs"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"]].map(([key, l]) => (
+        {[["kpi", "Indicateurs"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -226,6 +228,8 @@ function Dashboard({ onLogout }) {
             ))}
           </div>
         )}
+
+        {tab === "promos" && <PromosAdmin />}
       </main>
 
       {/* Modale photos EDL */}
@@ -276,3 +280,87 @@ const fdate = (d) => new Date(d).toLocaleDateString("fr-FR");
 const ynbadge = (v) => v === false
   ? <span style={{ color: "#fff", background: C.bad, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Non</span>
   : v === true ? <span style={{ color: "#fff", background: C.ok, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Oui</span> : "—";
+
+// ---------- GESTION DES PROMOS PARTENAIRES ----------
+const VIDE = { partenaire: "", titre: "", description: "", code_promo: "", logo_url: "", lien: "", date_debut: "", date_fin: "", valide: false, ordre: 0 };
+function PromosAdmin() {
+  const [list, setList] = useState(null);
+  const [form, setForm] = useState(null); // null = pas d'édition, sinon objet promo
+  const lblStyle = { fontSize: 13, fontWeight: 700, color: C.muted };
+
+  const load = () => adminFn("admin-promos-list").then((r) => setList(r.promos || []));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!form.partenaire.trim() || !form.titre.trim()) { alert("Partenaire et titre obligatoires."); return; }
+    const r = await adminFn("admin-promo-save", form);
+    if (r.ok) { setForm(null); load(); } else alert(r.error);
+  };
+  const del = async (id) => {
+    if (!confirm("Supprimer cette promo ?")) return;
+    await adminFn("admin-promo-delete", { id }); load();
+  };
+  const toggleValide = async (p) => {
+    await adminFn("admin-promo-save", { ...p, valide: !p.valide }); load();
+  };
+
+  const F = (k, label, type = "text") => (
+    <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>{label}
+      <input style={inp} type={type} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+    </label>
+  );
+
+  if (form) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 20, maxWidth: 560 }}>
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0 }}>{form.id ? "Modifier" : "Nouvelle"} promo</h3>
+        {F("partenaire", "Partenaire *")}
+        {F("titre", "Titre de l'offre *")}
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Description
+          <textarea style={{ ...inp, minHeight: 70 }} value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </label>
+        {F("code_promo", "Code promo")}
+        {F("logo_url", "URL du logo")}
+        {F("lien", "Lien (réservation/site)")}
+        <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ flex: 1 }}>{F("date_debut", "Début", "date")}</div>
+          <div style={{ flex: 1 }}>{F("date_fin", "Fin", "date")}</div>
+        </div>
+        <label style={{ display: "flex", gap: 8, fontSize: 14, alignItems: "center", margin: "6px 0 16px" }}>
+          <input type="checkbox" checked={form.valide} onChange={(e) => setForm({ ...form, valide: e.target.checked })} />
+          Validée (visible par les clients)
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={btn()} onClick={save}>Enregistrer</button>
+          <button style={{ ...btn("#e8eff0"), color: C.muted }} onClick={() => setForm(null)}>Annuler</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button style={{ ...btn(), marginBottom: 16 }} onClick={() => setForm({ ...VIDE })}>+ Nouvelle promo</button>
+      {!list ? <p style={{ color: C.muted }}>Chargement…</p>
+        : list.length === 0 ? <p style={{ color: C.muted }}>Aucune promo. Cliquez sur « + Nouvelle promo ».</p>
+        : <div style={{ display: "grid", gap: 12 }}>
+            {list.map((p) => (
+              <div key={p.id} style={{ background: C.card, border: `1px solid ${p.valide ? C.ok : C.line}`, borderRadius: 12, padding: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <span style={{ fontSize: 12, color: p.valide ? C.ok : C.warn, fontWeight: 700 }}>{p.valide ? "● PUBLIÉE" : "○ EN ATTENTE"}</span>
+                    <b style={{ color: C.blueDk, display: "block" }}>{p.titre}</b>
+                    <span style={{ color: C.muted, fontSize: 13 }}>{p.partenaire}{p.code_promo ? ` · code ${p.code_promo}` : ""}{p.date_fin ? ` · jusqu'au ${fdate(p.date_fin)}` : ""}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "start" }}>
+                    <button style={{ ...btn(p.valide ? "#e8eff0" : C.ok), color: p.valide ? C.muted : "#fff", padding: "6px 10px", fontSize: 13 }} onClick={() => toggleValide(p)}>{p.valide ? "Dépublier" : "Publier"}</button>
+                    <button style={{ ...btn("#e8eff0"), color: C.blue, padding: "6px 10px", fontSize: 13 }} onClick={() => setForm({ ...p, date_debut: p.date_debut || "", date_fin: p.date_fin || "" })}>Modifier</button>
+                    <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "6px 10px", fontSize: 13 }} onClick={() => del(p.id)}>Suppr.</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>}
+    </div>
+  );
+}
