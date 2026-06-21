@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 // =====================================================================
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
-const FN = "https://TON-PROJET.supabase.co/functions/v1";
+const FN = "https://wmwxgrhlcqluzejdolje.supabase.co/functions/v1";
 const post = async (name, body) => {
   try {
     const r = await fetch(`${FN}/${name}`, {
