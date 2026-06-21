@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 // =====================================================================
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
-const FN = "https://wmwxgrhlcqluzejdolje.supabase.co/functions/v1";
+const FN = "https://TON-PROJET.supabase.co/functions/v1";
 const post = async (name, body) => {
   try {
     const r = await fetch(`${FN}/${name}`, {
@@ -161,6 +161,7 @@ function Identify({ slug, onAuth }) {
 function EDL({ token }) {
   const [type, setType] = useState("entree");
   const [par, setPar] = useState("client");
+  const [numero, setNumero] = useState("");
   const [pieces, setPieces] = useState(PIECES_DEFAUT.map((p) => ({ piece: p, etat: "bon", commentaire: "" })));
   const [gen, setGen] = useState("");
   const [done, setDone] = useState(false);
@@ -170,8 +171,9 @@ function EDL({ token }) {
   const setPiece = (i, k, v) => setPieces(pieces.map((p, j) => j === i ? { ...p, [k]: v } : p));
 
   const submit = async () => {
+    if (!numero.trim()) { alert("Veuillez renseigner votre numéro d'appartement."); return; }
     const signature = sigRef.current?.toDataURL?.() || null;
-    const r = await post("submit-edl", { token, type, rempli_par: par, signature, commentaire_general: gen, pieces });
+    const r = await post("submit-edl", { token, type, rempli_par: par, numero_appartement: numero, signature, commentaire_general: gen, pieces });
     if (r.ok) { setEdlId(r.edl_id); setDone(true); } else alert(r.error);
   };
 
@@ -196,6 +198,13 @@ function EDL({ token }) {
 
   return (
     <>
+      <Card>
+        <label style={label}>Numéro d'appartement <span style={{ color: C.bad }}>*</span>
+          <input style={inp} value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="ex. Apt 101" />
+        </label>
+        <p style={{ fontSize: 12, color: C.muted, margin: "6px 0 0" }}>Indiquez le numéro affiché dans votre logement.</p>
+      </Card>
+
       <Card>
         <div style={{ display: "flex", gap: 8 }}>
           {[["entree", "Entrée"], ["sortie", "Sortie"]].map(([k, l]) => (
@@ -231,7 +240,7 @@ function EDL({ token }) {
         <span style={label}>Signature</span>
         <SignaturePad ref={sigRef} />
         <p style={{ fontSize: 11, color: C.muted }}>Cette signature vaut commencement de preuve, sans valeur de signature électronique qualifiée.</p>
-        <button style={btn()} onClick={submit}>Valider l'état des lieux</button>
+        <button style={btn()} disabled={!numero.trim()} onClick={submit}>Valider l'état des lieux</button>
       </Card>
     </>
   );
