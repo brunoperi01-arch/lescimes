@@ -147,8 +147,6 @@ function Identify({ onAuth }) {
           <label style={label}>Email<input style={inp} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
           <div style={{ height: 12 }} />
           <label style={label}>Date d'arrivée<input style={inp} type="date" value={f.date_arrivee} onChange={(e) => setF({ ...f, date_arrivee: e.target.value })} /></label>
-          <div style={{ height: 12 }} />
-          <label style={label}>Date de départ<input style={inp} type="date" value={f.date_depart} onChange={(e) => setF({ ...f, date_depart: e.target.value })} /></label>
           <div style={{ height: 16 }} />
           <label style={{ display: "flex", gap: 8, fontSize: 13, color: C.text, alignItems: "flex-start" }}>
             <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} style={{ marginTop: 3 }} />
