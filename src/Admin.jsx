@@ -5,10 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
-
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
-
+const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -149,7 +147,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}` }}>
-        {[["kpi", "Indicateurs"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
+        {[["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -230,6 +228,7 @@ function Dashboard({ onLogout }) {
         )}
 
         {tab === "promos" && <PromosAdmin />}
+        {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
       </main>
 
       {/* Modale photos EDL */}
@@ -280,6 +279,154 @@ const fdate = (d) => new Date(d).toLocaleDateString("fr-FR");
 const ynbadge = (v) => v === false
   ? <span style={{ color: "#fff", background: C.bad, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Non</span>
   : v === true ? <span style={{ color: "#fff", background: C.ok, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Oui</span> : "—";
+
+// ---------- GESTION DES SÉJOURS (réaffectation appartement) ----------
+function SejoursAdmin({ apparts }) {
+  const [list, setList] = useState(null);
+  const [q, setQ] = useState("");
+  const [fiche, setFiche] = useState(null); // détail du séjour ouvert
+  const load = () => adminFn("admin-sejours-list").then((r) => setList(r.sejours || []));
+  useEffect(() => { load(); }, []);
+
+  const openFiche = async (sejourId) => {
+    setFiche({ loading: true });
+    const r = await adminFn("admin-sejour-detail", { sejour_id: sejourId });
+    setFiche(r.error ? { error: r.error } : r);
+  };
+
+  const reaffect = async (sejourId, appartementId) => {
+    if (!appartementId) return;
+    const r = await adminFn("admin-sejour-reaffect", { sejour_id: sejourId, appartement_id: appartementId });
+    if (r.ok) load(); else alert(r.error);
+  };
+
+  const filtered = (list || []).filter((s) =>
+    !q || (s.nom_client || "").toLowerCase().includes(q.toLowerCase())
+       || (s.email || "").toLowerCase().includes(q.toLowerCase())
+       || (s.appart_nom || "").toLowerCase().includes(q.toLowerCase()));
+
+  if (!list) return <p style={{ color: C.muted }}>Chargement…</p>;
+  return (
+    <div>
+      <input style={{ ...inp, maxWidth: 360, marginBottom: 16 }} placeholder="Rechercher (nom, email, appartement)…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {filtered.length === 0 ? <p style={{ color: C.muted }}>Aucun séjour.</p>
+        : <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
+                <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+              <tbody>{filtered.map((s) => (
+                <tr key={s.id}>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.nom_client}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.email}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{fdate(s.date_arrivee)}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+                    <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
+                  </td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+                    <select defaultValue="" onChange={(e) => reaffect(s.id, e.target.value)}
+                      style={{ ...inp, width: 180, marginTop: 0 }}>
+                      <option value="">— Changer —</option>
+                      {(apparts || []).map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+
+      {fiche && <FicheSejour fiche={fiche} onClose={() => setFiche(null)} />}
+    </div>
+  );
+}
+
+// ---------- FICHE DÉTAILLÉE D'UN SÉJOUR ----------
+function FicheSejour({ fiche, onClose }) {
+  const note = (n) => n == null ? "—" : `${n}/5`;
+  const etatColor = (e) => e === "mauvais" ? C.bad : e === "moyen" ? C.warn : C.ok;
+  const s = fiche.sejour;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 24, maxWidth: 720, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 16 }}>
+          <b style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18 }}>Fiche séjour</b>
+          <button onClick={onClose} style={{ ...btn("#e8eff0"), color: C.muted, padding: "6px 12px" }}>Fermer</button>
+        </div>
+
+        {fiche.loading && <p style={{ color: C.muted }}>Chargement…</p>}
+        {fiche.error && <p style={{ color: C.bad }}>{fiche.error}</p>}
+
+        {s && <>
+          {/* Infos client */}
+          <div style={{ background: C.bg, borderRadius: 10, padding: 16, marginBottom: 18 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.blueDk }}>{s.nom_client}</div>
+            <div style={{ color: C.muted, fontSize: 14 }}>{s.email}</div>
+            <div style={{ fontSize: 14, marginTop: 6 }}>
+              <b>{s.appart_nom || "—"}</b> · arrivée {fdate(s.date_arrivee)}{s.date_depart ? ` · départ ${fdate(s.date_depart)}` : ""}
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Offres acceptées : {s.consent_marketing ? "oui" : "non"}</div>
+          </div>
+
+          {/* États des lieux */}
+          <Section titre="États des lieux">
+            {fiche.edl.length === 0 ? <Vide /> : fiche.edl.map((e, i) => (
+              <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, color: C.blueDk }}>{e.type === "sortie" ? "Sortie" : "Entrée"} · rempli par {e.rempli_par === "staff" ? "le personnel" : "le client"} · {fdate(e.created_at)}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {e.pieces.map((p, j) => (
+                    <span key={j} style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, background: "#fff", border: `1px solid ${etatColor(p.etat)}`, color: etatColor(p.etat) }}>
+                      {p.piece} : {p.etat}{p.commentaire ? ` (${p.commentaire})` : ""}
+                    </span>
+                  ))}
+                </div>
+                {e.commentaire_general && <div style={{ fontSize: 13, color: C.muted, marginTop: 8 }}>« {e.commentaire_general} »</div>}
+              </div>
+            ))}
+          </Section>
+
+          {/* Mi-séjour */}
+          <Section titre="Mi-séjour">
+            {fiche.midstay.length === 0 ? <Vide /> : fiche.midstay.map((m, i) => (
+              <div key={i} style={{ fontSize: 14, marginBottom: 6 }}>
+                Logement : {ynbadge(m.logement_ok)} · Équipements : {ynbadge(m.equipements_ok)} · Propreté : {ynbadge(m.proprete_ok)}
+                {m.commentaire && <div style={{ color: C.muted, fontSize: 13 }}>« {m.commentaire} »</div>}
+              </div>
+            ))}
+          </Section>
+
+          {/* Satisfaction */}
+          <Section titre="Satisfaction post-séjour">
+            {fiche.satisfaction.length === 0 ? <Vide /> : fiche.satisfaction.map((sa, i) => (
+              <div key={i} style={{ fontSize: 14, marginBottom: 8 }}>
+                <div>Accueil {note(sa.note_accueil)} · Propreté {note(sa.note_proprete)} · Équip. {note(sa.note_equipements)} · Literie {note(sa.note_literie)} · Q/P {note(sa.note_qualite_prix)} · NPS {sa.nps ?? "—"}/10</div>
+                {sa.point_positif && <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>+ {sa.point_positif}</div>}
+                {sa.point_amelioration && <div style={{ color: C.muted, fontSize: 13 }}>– {sa.point_amelioration}</div>}
+              </div>
+            ))}
+          </Section>
+
+          {/* Incidents */}
+          <Section titre="Incidents">
+            {fiche.incidents.length === 0 ? <Vide /> : fiche.incidents.map((inc, i) => (
+              <div key={i} style={{ fontSize: 14, marginBottom: 6 }}>
+                <b>{inc.categorie}</b> · <span style={{ color: inc.statut === "resolu" ? C.ok : inc.statut === "en_cours" ? C.warn : C.bad }}>{inc.statut}</span> · {fdate(inc.created_at)}
+                <div style={{ color: C.muted, fontSize: 13 }}>{inc.message}</div>
+              </div>
+            ))}
+          </Section>
+        </>}
+      </div>
+    </div>
+  );
+}
+const Section = ({ titre, children }) => (
+  <div style={{ marginBottom: 18 }}>
+    <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 14, marginBottom: 8, letterSpacing: "-.3px" }}>{titre}</div>
+    {children}
+  </div>
+);
+const Vide = () => <span style={{ color: C.muted, fontSize: 13 }}>Aucune donnée.</span>;
 
 // ---------- GESTION DES PROMOS PARTENAIRES ----------
 const VIDE = { partenaire: "", titre: "", description: "", code_promo: "", logo_url: "", lien: "", date_debut: "", date_fin: "", valide: false, ordre: 0 };
