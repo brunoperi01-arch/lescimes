@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 // =====================================================================
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
-const FN = "https:///wmwxgrhlcqluzejdolje.supabase.co/functions/v1";
+const FN = "https://TON-PROJET.supabase.co/functions/v1";
 const post = async (name, body) => {
   try {
     const r = await fetch(`${FN}/${name}`, {
@@ -285,7 +285,7 @@ function EDL({ token }) {
           <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 20, margin: "0 0 4px", letterSpacing: "-.3px" }}>{p.piece}</h3>
           <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Dans quel état se trouve cette pièce ?</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[["bon", "Bon état", C.ok], ["moyen", "État moyen", C.gold], ["mauvais", "Mauvais état", C.bad]].map(([k, l, col]) => (
+            {[["bon", "Bon état", C.ok], ["moyen", "État moyen", C.gold], ["mauvais", "Mauvais état", C.bad], ["absent", "Non concerné (pièce absente)", C.muted]].map(([k, l, col]) => (
               <button key={k} onClick={() => setPiece(i, "etat", k)}
                 style={{ padding: "16px", border: `2px solid ${p.etat === k ? col : C.line}`, borderRadius: 12,
                   background: p.etat === k ? col : "#fff", color: p.etat === k ? "#fff" : C.text,
