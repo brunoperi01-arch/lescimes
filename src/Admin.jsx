@@ -5,9 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
-
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
+const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -148,7 +147,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}` }}>
-        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
+        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -254,6 +253,7 @@ function Dashboard({ onLogout }) {
         })()}
 
         {tab === "promos" && <PromosAdmin />}
+        {tab === "activites" && <ActivitesAdmin />}
         {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
       </main>
 
@@ -523,6 +523,118 @@ const Section = ({ titre, children }) => (
   </div>
 );
 const Vide = () => <span style={{ color: C.muted, fontSize: 13 }}>Aucune donnée.</span>;
+
+// ---------- GESTION DES ACTIVITÉS (avec upload photo) ----------
+const VIDE_ACT = { titre: "", description: "", categorie: "", image_url: "", lien: "", actif: true, ordre: 0 };
+function ActivitesAdmin() {
+  const [list, setList] = useState(null);
+  const [form, setForm] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const lblStyle = { fontSize: 13, fontWeight: 700, color: C.muted };
+
+  const load = () => adminFn("admin-activites-list").then((r) => setList(r.activites || []));
+  useEffect(() => { load(); }, []);
+
+  // Compression + upload vers le bucket public via URL signée
+  const uploadPhoto = async (file) => {
+    setUploading(true);
+    try {
+      const blob = await compressImage(file);
+      const r = await adminFn("admin-img-upload-url", { ext: "jpg" });
+      if (!r.signedUrl) throw new Error(r.error || "URL refusée");
+      const up = await fetch(r.signedUrl, { method: "PUT", headers: { "content-type": "image/jpeg" }, body: blob });
+      if (!up.ok) throw new Error("Upload échoué");
+      setForm((f) => ({ ...f, image_url: r.publicUrl }));
+    } catch (e) { alert("Erreur upload : " + e.message); }
+    setUploading(false);
+  };
+
+  const save = async () => {
+    if (!form.titre.trim()) { alert("Titre obligatoire."); return; }
+    const r = await adminFn("admin-activite-save", form);
+    if (r.ok) { setForm(null); load(); } else alert(r.error);
+  };
+  const del = async (id) => { if (confirm("Supprimer cette activité ?")) { await adminFn("admin-activite-delete", { id }); load(); } };
+
+  if (form) {
+    return (
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 20, maxWidth: 560 }}>
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0 }}>{form.id ? "Modifier" : "Nouvelle"} activité</h3>
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Titre *
+          <input style={inp} value={form.titre || ""} onChange={(e) => setForm({ ...form, titre: e.target.value })} />
+        </label>
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Catégorie
+          <input style={inp} value={form.categorie || ""} onChange={(e) => setForm({ ...form, categorie: e.target.value })} placeholder="ex. Randonnée, Famille, Restauration" />
+        </label>
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Description
+          <textarea style={{ ...inp, minHeight: 70 }} value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </label>
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Lien
+          <input style={inp} value={form.lien || ""} onChange={(e) => setForm({ ...form, lien: e.target.value })} placeholder="https://…" />
+        </label>
+        {/* Photo */}
+        <div style={{ marginBottom: 14 }}>
+          <span style={lblStyle}>Photo</span>
+          {form.image_url && <img src={form.image_url} alt="" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10, margin: "8px 0" }} />}
+          <label style={{ ...btn("#e8eff0"), color: C.blue, display: "inline-block", padding: "10px 14px", fontSize: 14, marginTop: 6 }}>
+            {uploading ? "Envoi…" : form.image_url ? "Changer la photo" : "Ajouter une photo"}
+            <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadPhoto(e.target.files[0])} style={{ display: "none" }} />
+          </label>
+        </div>
+        <label style={{ display: "flex", gap: 8, fontSize: 14, alignItems: "center", margin: "6px 0 16px" }}>
+          <input type="checkbox" checked={form.actif !== false} onChange={(e) => setForm({ ...form, actif: e.target.checked })} />
+          Visible par les clients
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={btn()} onClick={save}>Enregistrer</button>
+          <button style={{ ...btn("#e8eff0"), color: C.muted }} onClick={() => setForm(null)}>Annuler</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button style={{ ...btn(), marginBottom: 16 }} onClick={() => setForm({ ...VIDE_ACT })}>+ Nouvelle activité</button>
+      {!list ? <p style={{ color: C.muted }}>Chargement…</p>
+        : list.length === 0 ? <p style={{ color: C.muted }}>Aucune activité. Cliquez sur « + Nouvelle activité ».</p>
+        : <div style={{ display: "grid", gap: 12 }}>
+            {list.map((a) => (
+              <div key={a.id} style={{ background: C.card, border: `1px solid ${a.actif ? C.line : C.warn}`, borderRadius: 12, padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
+                {a.image_url
+                  ? <img src={a.image_url} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                  : <div style={{ width: 64, height: 64, borderRadius: 8, background: C.bg, flexShrink: 0 }} />}
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 12, color: a.actif ? C.ok : C.warn, fontWeight: 700 }}>{a.actif ? "● VISIBLE" : "○ MASQUÉE"}</span>
+                  <b style={{ color: C.blueDk, display: "block" }}>{a.titre}</b>
+                  <span style={{ color: C.muted, fontSize: 13 }}>{a.categorie}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={{ ...btn("#e8eff0"), color: C.blue, padding: "6px 10px", fontSize: 13 }} onClick={() => setForm({ ...a })}>Modifier</button>
+                  <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "6px 10px", fontSize: 13 }} onClick={() => del(a.id)}>Suppr.</button>
+                </div>
+              </div>
+            ))}
+          </div>}
+    </div>
+  );
+}
+
+// Compression image côté client (réutilisée pour les activités)
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1280 / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.75);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 // ---------- GESTION DES PROMOS PARTENAIRES ----------
 const VIDE = { partenaire: "", titre: "", description: "", code_promo: "", logo_url: "", lien: "", date_debut: "", date_fin: "", valide: false, ordre: 0 };
