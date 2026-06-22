@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://TON-PROJET.supabase.co";
-const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
+const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
