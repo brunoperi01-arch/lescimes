@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 // =====================================================================
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
-const FN = "https://wmwxgrhlcqluzejdolje.supabase.co/functions/v1";
+const FN = "https://TON-PROJET.supabase.co/functions/v1";
 const post = async (name, body) => {
   try {
     const r = await fetch(`${FN}/${name}`, {
@@ -163,13 +163,62 @@ function Identify({ onAuth }) {
             {loading ? "Création de votre espace…" : "Accéder à mon espace"}
           </button>
         </Card>
+        <Vitrine />
       </div>
     </div>
   );
 }
 
-// =====================================================================
-// MODULE 1 — ÉTAT DES LIEUX
+// Vitrine publique (promos + activités) affichée sur la page d'ouverture
+function Vitrine() {
+  const [promos, setPromos] = useState([]);
+  const [activites, setActivites] = useState([]);
+  useEffect(() => {
+    post("get-promos", {}).then((r) => setPromos(r.promos || []));
+    post("get-activites", {}).then((r) => setActivites(r.activites || []));
+  }, []);
+  if (promos.length === 0 && activites.length === 0) return null;
+  return (
+    <div style={{ marginTop: 24 }}>
+      {promos.length > 0 && (
+        <>
+          <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 10px" }}>Offres de nos partenaires</h2>
+          {promos.map((p, i) => (
+            <Card key={`p${i}`} style={{ padding: 16, borderColor: C.gold }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {p.logo_url && <img src={p.logo_url} alt={p.partenaire} style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 8 }} />}
+                <div>
+                  <span style={{ fontSize: 11, color: "#fff", background: C.gold, borderRadius: 6, padding: "2px 8px", fontWeight: 700 }}>OFFRE PARTENAIRE</span>
+                  <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{p.partenaire}</div>
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, color: C.blueDk, margin: "10px 0 4px" }}>{p.titre}</div>
+              {p.description && <p style={{ color: C.muted, fontSize: 14, margin: "0 0 8px" }}>{p.description}</p>}
+              {p.code_promo && <div style={{ fontSize: 14 }}>Code : <b style={{ background: C.bg, padding: "2px 8px", borderRadius: 6, letterSpacing: 1 }}>{p.code_promo}</b></div>}
+              {p.lien && <a href={p.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14, display: "inline-block", marginTop: 8 }}>En profiter →</a>}
+            </Card>
+          ))}
+        </>
+      )}
+      {activites.length > 0 && (
+        <>
+          <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "8px 0 10px" }}>À faire dans la vallée</h2>
+          {activites.map((a, i) => (
+            <Card key={`a${i}`} style={{ padding: 0, overflow: "hidden" }}>
+              {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
+              <div style={{ padding: 16 }}>
+                {a.categorie && <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }}>{a.categorie}</span>}
+                <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 16, letterSpacing: "-.3px", margin: "4px 0" }}>{a.titre}</div>
+                <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>{a.description}</p>
+                {a.lien && <a href={a.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14 }}>En savoir plus →</a>}
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
 // =====================================================================
 function EDL({ token }) {
   const [type, setType] = useState("entree");
