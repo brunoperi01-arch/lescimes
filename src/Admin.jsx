@@ -5,9 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
-
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
+const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -86,7 +85,7 @@ function Dashboard({ onLogout }) {
   const [filtre, setFiltre] = useState("");
   const [depuis, setDepuis] = useState("");
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("kpi");
+  const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [photos, setPhotos] = useState(null); // {client, list} ou null
@@ -148,7 +147,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}` }}>
-        {[["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
+        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -159,6 +158,8 @@ function Dashboard({ onLogout }) {
       </div>
 
       <main style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
+        {tab === "overview" && <Overview onOpenAppart={(id) => { setFiltre(id); setTab("inc"); }} />}
+
         {tab === "kpi" && k && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14 }}>
@@ -204,29 +205,52 @@ function Dashboard({ onLogout }) {
             ])} empty="Aucune réponse mi-séjour." />
         )}
 
-        {tab === "inc" && (
-          <div style={{ display: "grid", gap: 12 }}>
-            {(data?.incidents || []).length === 0 && <p style={{ color: C.muted }}>Aucun incident.</p>}
-            {(data?.incidents || []).map((i) => (
-              <div key={i.id} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <b style={{ color: C.blueDk }}>{i.categorie}</b>
-                    <span style={{ color: C.muted, fontSize: 13 }}> · {i._client} · {i._appart} · {fdate(i.created_at)}</span>
-                    <p style={{ margin: "6px 0 0", fontSize: 14 }}>{i.message}</p>
+        {tab === "inc" && (() => {
+          const incs = data?.incidents || [];
+          if (incs.length === 0) return <p style={{ color: C.muted }}>Aucun incident.</p>;
+          // Regroupe par appartement
+          const groupes = {};
+          for (const i of incs) {
+            const key = i._appart || "Sans appartement";
+            (groupes[key] = groupes[key] || []).push(i);
+          }
+          const noms = Object.keys(groupes).sort();
+          return (
+            <div style={{ display: "grid", gap: 20 }}>
+              {noms.map((nom) => {
+                const ouverts = groupes[nom].filter((i) => i.statut !== "resolu").length;
+                return (
+                  <div key={nom}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 16, margin: 0, letterSpacing: "-.3px" }}>{nom}</h3>
+                      {ouverts > 0 && <span style={{ background: C.bad, color: "#fff", borderRadius: 999, fontSize: 12, fontWeight: 700, padding: "2px 9px" }}>{ouverts} ouvert{ouverts > 1 ? "s" : ""}</span>}
+                    </div>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {groupes[nom].map((i) => (
+                        <div key={i.id} style={{ background: C.card, border: `1px solid ${i.statut === "resolu" ? C.line : C.bad}`, borderRadius: 12, padding: 14 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                            <div>
+                              <b style={{ color: C.blueDk }}>{i.categorie}</b>
+                              <span style={{ color: C.muted, fontSize: 13 }}> · {i._client} · {fdate(i.created_at)}</span>
+                              <p style={{ margin: "6px 0 0", fontSize: 14 }}>{i.message}</p>
+                            </div>
+                            <select value={i.statut} onChange={(e) => setStatut(i.id, e.target.value)}
+                              style={{ ...inp, width: 140, marginTop: 0, alignSelf: "start",
+                                borderColor: i.statut === "resolu" ? C.ok : i.statut === "en_cours" ? C.warn : C.bad }}>
+                              <option value="nouveau">Nouveau</option>
+                              <option value="en_cours">En cours</option>
+                              <option value="resolu">Résolu</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <select value={i.statut} onChange={(e) => setStatut(i.id, e.target.value)}
-                    style={{ ...inp, width: 140, marginTop: 0, alignSelf: "start",
-                      borderColor: i.statut === "resolu" ? C.ok : i.statut === "en_cours" ? C.warn : C.bad }}>
-                    <option value="nouveau">Nouveau</option>
-                    <option value="en_cours">En cours</option>
-                    <option value="resolu">Résolu</option>
-                  </select>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {tab === "promos" && <PromosAdmin />}
         {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
@@ -281,7 +305,77 @@ const ynbadge = (v) => v === false
   ? <span style={{ color: "#fff", background: C.bad, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Non</span>
   : v === true ? <span style={{ color: "#fff", background: C.ok, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Oui</span> : "—";
 
-// ---------- GESTION DES SÉJOURS (réaffectation appartement) ----------
+// ---------- VUE D'ENSEMBLE PAR APPARTEMENT ----------
+function Overview({ onOpenAppart }) {
+  const [lignes, setLignes] = useState(null);
+  const [q, setQ] = useState("");
+  useEffect(() => { adminFn("admin-overview").then((r) => setLignes(r.lignes || [])); }, []);
+  if (!lignes) return <p style={{ color: C.muted }}>Chargement…</p>;
+
+  // Par défaut, on masque les appartements sans aucune donnée pour alléger
+  const visibles = lignes.filter((l) =>
+    (!q || l.nom.toLowerCase().includes(q.toLowerCase()))
+  );
+  const actifs = visibles.filter((l) => l.nb_sejours > 0 || l.incidents_total > 0);
+  const vides = visibles.filter((l) => l.nb_sejours === 0 && l.incidents_total === 0);
+
+  const npsColor = (n) => n == null ? C.muted : n >= 50 ? C.ok : n >= 0 ? C.warn : C.bad;
+  const noteColor = (n) => n == null ? C.muted : n >= 4 ? C.ok : n >= 3 ? C.warn : C.bad;
+
+  const Ligne = ({ l }) => (
+    <tr style={{ cursor: l.incidents_total ? "pointer" : "default" }} onClick={() => l.incidents_total && onOpenAppart(l.id)}>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, fontWeight: 700, color: C.blueDk }}>{l.nom}</td>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, textAlign: "center" }}>{l.nb_sejours}</td>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, textAlign: "center" }}>{l.nb_reponses}</td>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, textAlign: "center", fontWeight: 700, color: noteColor(l.note_moy) }}>{l.note_moy ?? "—"}</td>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, textAlign: "center", fontWeight: 700, color: npsColor(l.nps) }}>{l.nps ?? "—"}</td>
+      <td style={{ padding: 12, borderBottom: `1px solid ${C.bg}`, textAlign: "center" }}>
+        {l.incidents_ouverts > 0
+          ? <span style={{ background: C.bad, color: "#fff", borderRadius: 999, fontSize: 12, fontWeight: 700, padding: "2px 9px" }}>{l.incidents_ouverts}</span>
+          : <span style={{ color: C.muted }}>0</span>}
+      </td>
+    </tr>
+  );
+
+  const Tete = () => (
+    <thead><tr>{["Appartement", "Séjours", "Réponses", "Note moy.", "NPS", "Incidents ouv."].map((h, i) =>
+      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: 12, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap", fontSize: 13 }}>{h}</th>)}</tr></thead>
+  );
+
+  return (
+    <div>
+      <input style={{ ...inp, maxWidth: 300, marginBottom: 16 }} placeholder="Rechercher un appartement…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {actifs.length === 0 && vides.length === 0 && <p style={{ color: C.muted }}>Aucun appartement.</p>}
+
+      {actifs.length > 0 && (
+        <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, marginBottom: 18 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <Tete />
+            <tbody>{actifs.map((l) => <Ligne key={l.id} l={l} />)}</tbody>
+          </table>
+        </div>
+      )}
+
+      {vides.length > 0 && (
+        <details>
+          <summary style={{ cursor: "pointer", color: C.muted, fontSize: 14, marginBottom: 10 }}>
+            {vides.length} appartement{vides.length > 1 ? "s" : ""} sans activité (afficher)
+          </summary>
+          <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <Tete />
+              <tbody>{vides.map((l) => <Ligne key={l.id} l={l} />)}</tbody>
+            </table>
+          </div>
+        </details>
+      )}
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>Cliquez sur une ligne avec des incidents pour voir le détail.</p>
+    </div>
+  );
+}
+
+// ---------- VUE D'ENSEMBLE : fin ----------
+
 function SejoursAdmin({ apparts }) {
   const [list, setList] = useState(null);
   const [q, setQ] = useState("");
