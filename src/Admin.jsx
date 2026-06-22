@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
+const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -440,7 +440,8 @@ function SejoursAdmin({ apparts }) {
 // ---------- FICHE DÉTAILLÉE D'UN SÉJOUR ----------
 function FicheSejour({ fiche, onClose }) {
   const note = (n) => n == null ? "—" : `${n}/5`;
-  const etatColor = (e) => e === "mauvais" ? C.bad : e === "moyen" ? C.warn : C.ok;
+  const etatColor = (e) => e === "mauvais" ? C.bad : e === "moyen" ? C.warn : e === "absent" ? C.muted : C.ok;
+  const etatLabel = (e) => e === "absent" ? "non concerné" : e;
   const s = fiche.sejour;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
@@ -472,7 +473,7 @@ function FicheSejour({ fiche, onClose }) {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                   {e.pieces.map((p, j) => (
                     <span key={j} style={{ fontSize: 12, padding: "3px 8px", borderRadius: 6, background: "#fff", border: `1px solid ${etatColor(p.etat)}`, color: etatColor(p.etat) }}>
-                      {p.piece} : {p.etat}{p.commentaire ? ` (${p.commentaire})` : ""}
+                      {p.piece} : {etatLabel(p.etat)}{p.commentaire ? ` (${p.commentaire})` : ""}
                     </span>
                   ))}
                 </div>
