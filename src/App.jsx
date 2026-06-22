@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 // =====================================================================
 // CONFIG — renseigne l'URL de tes Edge Functions Supabase
 // =====================================================================
-const FN = "https://wmwxgrhlcqluzejdolje.supabase.co/functions/v1";
+const FN = "https://TON-PROJET.supabase.co/functions/v1";
 const post = async (name, body) => {
   try {
     const r = await fetch(`${FN}/${name}`, {
@@ -144,17 +144,17 @@ function Identify({ onAuth }) {
           <div style={{ height: 12 }} />
           <label style={label}>Nom<input style={inp} value={f.nom} onChange={(e) => setF({ ...f, nom: e.target.value })} /></label>
           <div style={{ height: 12 }} />
-          <label style={label}>Email<input style={inp} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+          <label style={label}>Email<input style={inp} type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
           <div style={{ height: 12 }} />
           <label style={label}>Date d'arrivée<input style={inp} type="date" value={f.date_arrivee} onChange={(e) => setF({ ...f, date_arrivee: e.target.value })} /></label>
           <div style={{ height: 16 }} />
           <label style={{ display: "flex", gap: 8, fontSize: 13, color: C.text, alignItems: "flex-start" }}>
-            <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} style={{ marginTop: 3 }} />
+            <input type="checkbox" checked={rgpd} onChange={(e) => setRgpd(e.target.checked)} style={{ marginTop: 2, width: 22, height: 22, flexShrink: 0 }} />
             <span>J'accepte le traitement de mes données pour la gestion de mon séjour (<a href="/confidentialite" style={{ color: C.blue }}>politique de confidentialité</a>).</span>
           </label>
           <div style={{ height: 10 }} />
           <label style={{ display: "flex", gap: 8, fontSize: 13, color: C.text, alignItems: "flex-start" }}>
-            <input type="checkbox" checked={mkt} onChange={(e) => setMkt(e.target.checked)} style={{ marginTop: 3 }} />
+            <input type="checkbox" checked={mkt} onChange={(e) => setMkt(e.target.checked)} style={{ marginTop: 2, width: 22, height: 22, flexShrink: 0 }} />
             <span>J'accepte de recevoir les offres de la résidence (facultatif).</span>
           </label>
           {err && <p style={{ color: C.bad, fontSize: 14 }}>{err}</p>}
@@ -174,77 +174,136 @@ function Identify({ onAuth }) {
 function EDL({ token }) {
   const [type, setType] = useState("entree");
   const [par, setPar] = useState("client");
-  const [pieces, setPieces] = useState(PIECES_DEFAUT.map((p) => ({ piece: p, etat: "bon", commentaire: "" })));
+  const [pieces, setPieces] = useState(PIECES_DEFAUT.map((p) => ({ piece: p, etat: null, commentaire: "" })));
   const [gen, setGen] = useState("");
   const [done, setDone] = useState(false);
   const [edlId, setEdlId] = useState(null);
+  const [step, setStep] = useState(0); // 0 = intro, 1..N = pièces, N+1 = signature
+  const [sending, setSending] = useState(false);
   const sigRef = useRef(null);
 
+  const N = pieces.length;
+  const totalSteps = N + 2; // intro + pièces + signature
   const setPiece = (i, k, v) => setPieces(pieces.map((p, j) => j === i ? { ...p, [k]: v } : p));
+  const toutesEvaluees = pieces.every((p) => p.etat !== null);
 
   const submit = async () => {
+    setSending(true);
     const signature = sigRef.current?.toDataURL?.() || null;
     const r = await post("submit-edl", { token, type, rempli_par: par, signature, commentaire_general: gen, pieces });
+    setSending(false);
     if (r.ok) { setEdlId(r.edl_id); setDone(true); } else alert(r.error);
   };
 
-  // Écran 2 : ajout de photos par pièce (activé seulement si PHOTOS_EDL)
+  // Écran final (confirmation / photos)
   if (done && !PHOTOS_EDL) return (
-    <Card><b style={{ color: C.ok }}>✓ État des lieux enregistré.</b>
+    <Card><b style={{ color: C.ok, fontSize: 18 }}>✓ État des lieux enregistré</b>
       <p style={{ color: C.muted, marginBottom: 0 }}>Merci. Une copie reste consultable par la résidence.</p></Card>
   );
   if (done) return (
     <>
-      <Card><b style={{ color: C.ok }}>✓ État des lieux enregistré.</b>
+      <Card><b style={{ color: C.ok, fontSize: 18 }}>✓ État des lieux enregistré</b>
         <p style={{ color: C.muted, marginBottom: 0 }}>Ajoutez des photos par pièce (optionnel mais recommandé).</p></Card>
       {pieces.map((p, i) => (
-        <Card key={i}>
-          <b>{p.piece}</b>
-          <PhotoUpload token={token} edlId={edlId} piece={p.piece} />
-        </Card>
+        <Card key={i}><b>{p.piece}</b><PhotoUpload token={token} edlId={edlId} piece={p.piece} /></Card>
       ))}
-      <Card><p style={{ color: C.muted, margin: 0, fontSize: 14 }}>Vos photos sont enregistrées au fur et à mesure. Vous pouvez fermer la page une fois terminé.</p></Card>
+      <Card><p style={{ color: C.muted, margin: 0, fontSize: 14 }}>Vos photos sont enregistrées au fur et à mesure.</p></Card>
     </>
   );
 
-  return (
+  // Barre de progression
+  const Progress = () => (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.muted, marginBottom: 6 }}>
+        <span>{step === 0 ? "Préparation" : step <= N ? `Pièce ${step}/${N}` : "Signature"}</span>
+        <span>{Math.round((step / (totalSteps - 1)) * 100)}%</span>
+      </div>
+      <div style={{ height: 6, background: C.line, borderRadius: 999 }}>
+        <div style={{ height: "100%", width: `${(step / (totalSteps - 1)) * 100}%`, background: C.blue, borderRadius: 999, transition: "width .25s" }} />
+      </div>
+    </div>
+  );
+
+  // Boutons de navigation (cibles ≥ 50px)
+  const navBtn = (bg, color) => ({ flex: 1, padding: "15px", borderRadius: 12, border: 0, fontWeight: 700, fontSize: 16, cursor: "pointer", background: bg, color, minHeight: 52 });
+
+  // ÉTAPE 0 : intro (type + rempli par)
+  if (step === 0) return (
     <>
+      <Progress />
       <Card>
-        <div style={{ display: "flex", gap: 8 }}>
+        <span style={label}>Type d'état des lieux</span>
+        <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
           {[["entree", "Entrée"], ["sortie", "Sortie"]].map(([k, l]) => (
-            <button key={k} onClick={() => setType(k)} style={{ ...btn(type === k ? C.blue : "#eef5f6"), color: type === k ? "#fff" : C.muted }}>{l}</button>
+            <button key={k} onClick={() => setType(k)} style={{ ...navBtn(type === k ? C.blue : "#eef5f6", type === k ? "#fff" : C.muted) }}>{l}</button>
           ))}
         </div>
-        <div style={{ height: 10 }} />
+        <div style={{ height: 16 }} />
         <label style={label}>Rempli par
-          <select style={inp} value={par} onChange={(e) => setPar(e.target.value)}>
+          <select style={{ ...inp, minHeight: 50 }} value={par} onChange={(e) => setPar(e.target.value)}>
             <option value="client">Le client</option>
             <option value="staff">Avec le personnel</option>
           </select>
         </label>
+        <div style={{ height: 18 }} />
+        <button style={navBtn(C.blue, "#fff")} onClick={() => setStep(1)}>Commencer →</button>
       </Card>
+    </>
+  );
 
-      {pieces.map((p, i) => (
-        <Card key={i}>
-          <b>{p.piece}</b>
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            {[["bon", "Bon", C.ok], ["moyen", "Moyen", C.gold], ["mauvais", "Mauvais", C.bad]].map(([k, l, col]) => (
+  // ÉTAPES 1..N : une pièce à la fois
+  if (step <= N) {
+    const i = step - 1;
+    const p = pieces[i];
+    return (
+      <>
+        <Progress />
+        <Card>
+          <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 20, margin: "0 0 4px", letterSpacing: "-.3px" }}>{p.piece}</h3>
+          <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Dans quel état se trouve cette pièce ?</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[["bon", "Bon état", C.ok], ["moyen", "État moyen", C.gold], ["mauvais", "Mauvais état", C.bad]].map(([k, l, col]) => (
               <button key={k} onClick={() => setPiece(i, "etat", k)}
-                style={{ flex: 1, padding: "8px", border: `1px solid ${p.etat === k ? col : C.line}`, borderRadius: 8,
-                  background: p.etat === k ? col : "#fff", color: p.etat === k ? "#fff" : C.muted, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>{l}</button>
+                style={{ padding: "16px", border: `2px solid ${p.etat === k ? col : C.line}`, borderRadius: 12,
+                  background: p.etat === k ? col : "#fff", color: p.etat === k ? "#fff" : C.text,
+                  cursor: "pointer", fontWeight: 700, fontSize: 16, minHeight: 56, textAlign: "left" }}>
+                {p.etat === k ? "● " : "○ "}{l}
+              </button>
             ))}
           </div>
-          <input style={inp} placeholder="Remarque (optionnel)" value={p.commentaire} onChange={(e) => setPiece(i, "commentaire", e.target.value)} />
+          <input style={{ ...inp, minHeight: 50 }} placeholder="Remarque (optionnel)" value={p.commentaire} onChange={(e) => setPiece(i, "commentaire", e.target.value)} />
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button style={navBtn("#eef5f6", C.muted)} onClick={() => setStep(step - 1)}>← Précédent</button>
+            <button style={{ ...navBtn(p.etat ? C.blue : C.line, "#fff"), cursor: p.etat ? "pointer" : "not-allowed" }}
+              disabled={!p.etat} onClick={() => setStep(step + 1)}>
+              {step === N ? "Terminer →" : "Suivant →"}
+            </button>
+          </div>
+          {!p.etat && <p style={{ fontSize: 12, color: C.muted, textAlign: "center", margin: "8px 0 0" }}>Sélectionnez un état pour continuer.</p>}
         </Card>
-      ))}
+      </>
+    );
+  }
 
+  // ÉTAPE FINALE : commentaire + signature
+  return (
+    <>
+      <Progress />
       <Card>
-        <label style={label}>Commentaire général<textarea style={{ ...inp, minHeight: 70 }} value={gen} onChange={(e) => setGen(e.target.value)} /></label>
-        <div style={{ height: 12 }} />
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, margin: "0 0 12px", letterSpacing: "-.3px" }}>Dernière étape</h3>
+        <label style={label}>Commentaire général<textarea style={{ ...inp, minHeight: 80 }} value={gen} onChange={(e) => setGen(e.target.value)} /></label>
+        <div style={{ height: 14 }} />
         <span style={label}>Signature</span>
         <SignaturePad ref={sigRef} />
         <p style={{ fontSize: 11, color: C.muted }}>Cette signature vaut commencement de preuve, sans valeur de signature électronique qualifiée.</p>
-        <button style={btn()} onClick={submit}>Valider l'état des lieux</button>
+        {!toutesEvaluees && <p style={{ color: C.bad, fontSize: 13 }}>Certaines pièces n'ont pas été évaluées. Revenez en arrière pour les compléter.</p>}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={navBtn("#eef5f6", C.muted)} onClick={() => setStep(step - 1)}>← Précédent</button>
+          <button style={{ ...navBtn(toutesEvaluees && !sending ? C.blue : C.line, "#fff"), cursor: toutesEvaluees && !sending ? "pointer" : "not-allowed" }}
+            disabled={!toutesEvaluees || sending} onClick={submit}>
+            {sending ? "Envoi…" : "Valider"}
+          </button>
+        </div>
       </Card>
     </>
   );
