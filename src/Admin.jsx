@@ -11,7 +11,7 @@ const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // URL autorisée dans Supabase > Authentication > URL Configuration > Redirect URLs
-const PASSWORD_REDIRECT_URL = "https://lescimes.vercel.app/";
+const PASSWORD_REDIRECT_URL = "https://lescimes.vercel.app/admin-dashboard";
 
 const C = {
   blue: "#0f5b6b", blueDk: "#0a4350", blue2: "#13708a", gold: "#f2a65a",
