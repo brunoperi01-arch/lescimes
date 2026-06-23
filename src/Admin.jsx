@@ -11,7 +11,7 @@ const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // URL autorisée dans Supabase > Authentication > URL Configuration > Redirect URLs
-const PASSWORD_REDIRECT_URL = "https://lescimes.vercel.app/admin-dashboard";
+const PASSWORD_REDIRECT_URL = "https://lescimes.vercel.app/admin";
 
 const C = {
   blue: "#0f5b6b", blueDk: "#0a4350", blue2: "#13708a", gold: "#f2a65a",
@@ -23,46 +23,53 @@ const FONT_BODY = "'Plus Jakarta Sans',system-ui,sans-serif";
 
 // Appel d'une Edge Function admin avec le JWT de la session active.
 async function adminFn(name, body = {}) {
-  const {
-    data: { session },
-    error: sessionError,
-  } = await sb.auth.getSession();
+  try {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await sb.auth.getSession();
 
-  if (sessionError || !session?.access_token) {
+    if (sessionError || !session?.access_token) {
+      return {
+        error: sessionError?.message || "Session expirée. Veuillez vous reconnecter.",
+        status: 401,
+      };
+    }
+
+    const response = await fetch(`${FN}/${name}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    let result = {};
+    try {
+      result = await response.json();
+    } catch {
+      result = {};
+    }
+
+    if (!response.ok) {
+      const error = result.error || result.message || `Erreur ${response.status} sur ${name}`;
+      console.error("Erreur Edge Function", {
+        name,
+        status: response.status,
+        result,
+      });
+      return { ...result, error, status: response.status };
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`Impossible d'appeler la fonction ${name}`, error);
     return {
-      error: sessionError?.message || "Session expirée. Veuillez vous reconnecter.",
-      status: 401,
+      error: error instanceof Error ? error.message : `Impossible d'appeler ${name}`,
+      status: 0,
     };
   }
-
-  const response = await fetch(`${FN}/${name}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${session.access_token}`,
-      apikey: SUPABASE_ANON,
-    },
-    body: JSON.stringify(body),
-  });
-
-  let result = {};
-  try {
-    result = await response.json();
-  } catch {
-    result = {};
-  }
-
-  if (!response.ok) {
-    const error = result.error || result.message || `Erreur ${response.status} sur ${name}`;
-    console.error("Erreur Edge Function", {
-      name,
-      status: response.status,
-      result,
-    });
-    return { ...result, error, status: response.status };
-  }
-
-  return result;
 }
 
 export default function Admin() {
