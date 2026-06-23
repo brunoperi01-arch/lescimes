@@ -50,18 +50,54 @@ function useGlacierFonts() {
   }, []);
 }
 
+// =====================================================================
+// PERSISTANCE DE L'ACCÈS CLIENT
+// Le token est un jeton opaque signé HMAC : sejourId.exp.signature.
+// On ne stocke QUE ce jeton (jamais nom/email/date en clair) -> RGPD OK.
+// On lit l'expiration directement dans le jeton (pas d'appel serveur).
+// =====================================================================
+const TOKEN_KEY = "cimes_session_token";
+function tokenValide(t) {
+  const parts = (t || "").split(".");
+  if (parts.length < 3) return false;
+  const exp = Number(parts[1]);
+  return !!exp && Date.now() < exp;
+}
+
 export default function App() {
   useGlacierFonts();
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(() => {
+    try {
+      const t = localStorage.getItem(TOKEN_KEY);
+      if (tokenValide(t)) return t;
+      localStorage.removeItem(TOKEN_KEY); // jeton périmé ou corrompu -> on nettoie
+      return null;
+    } catch { return null; }
+  });
   const [tab, setTab] = useState("edl");
 
-  if (!token) return <Identify onAuth={setToken} />;
+  const handleAuth = (t) => {
+    try { localStorage.setItem(TOKEN_KEY, t); } catch {}
+    setToken(t);
+  };
+  const handleLogout = () => {
+    try { localStorage.removeItem(TOKEN_KEY); } catch {}
+    setToken(null);
+  };
+
+  if (!token) return <Identify onAuth={handleAuth} />;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: C.text }}>
-      <header style={{ background: C.blueDk, color: "#fff", padding: "18px 16px" }}>
-        <div style={{ fontFamily: FONT_TITLE, fontSize: 18, letterSpacing: "-.3px" }}>Les Cimes du Val d'Allos</div>
-        <div style={{ opacity: .85, fontSize: 13 }}>Espace client de votre séjour</div>
+      <header style={{ background: C.blueDk, color: "#fff", padding: "18px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: FONT_TITLE, fontSize: 18, letterSpacing: "-.3px" }}>Les Cimes du Val d'Allos</div>
+          <div style={{ opacity: .85, fontSize: 13 }}>Espace client de votre séjour</div>
+        </div>
+        <button onClick={handleLogout}
+          style={{ background: "none", border: "1px solid rgba(255,255,255,.4)", color: "#fff", borderRadius: 8, padding: "7px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+          Changer de séjour
+        </button>
       </header>
 
       <nav style={{ display: "flex", background: C.card, borderBottom: `1px solid ${C.line}`, position: "sticky", top: 0, zIndex: 5 }}>
