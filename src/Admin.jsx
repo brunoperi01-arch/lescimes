@@ -10,6 +10,9 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
+// URL autorisée dans Supabase > Authentication > URL Configuration > Redirect URLs
+const PASSWORD_REDIRECT_URL = "https://lescimes.vercel.app/admin-dashboard";
+
 const C = {
   blue: "#0f5b6b", blueDk: "#0a4350", blue2: "#13708a", gold: "#f2a65a",
   bg: "#f1f6f7", card: "#fff", text: "#13343b", muted: "#5d7a81",
@@ -18,33 +21,102 @@ const C = {
 const FONT_TITLE = "'Archivo Black',sans-serif";
 const FONT_BODY = "'Plus Jakarta Sans',system-ui,sans-serif";
 
-// appel d'une function admin avec le JWT de session
+// Appel d'une Edge Function admin avec le JWT de la session active.
 async function adminFn(name, body = {}) {
-  const { data: { session } } = await sb.auth.getSession();
-  const r = await fetch(`${FN}/${name}`, {
+  const {
+    data: { session },
+    error: sessionError,
+  } = await sb.auth.getSession();
+
+  if (sessionError || !session?.access_token) {
+    return {
+      error: sessionError?.message || "Session expirée. Veuillez vous reconnecter.",
+      status: 401,
+    };
+  }
+
+  const response = await fetch(`${FN}/${name}`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${session?.access_token}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${session.access_token}`,
+      apikey: SUPABASE_ANON,
+    },
     body: JSON.stringify(body),
   });
-  return r.json();
+
+  let result = {};
+  try {
+    result = await response.json();
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    const error = result.error || result.message || `Erreur ${response.status} sur ${name}`;
+    console.error("Erreur Edge Function", {
+      name,
+      status: response.status,
+      result,
+    });
+    return { ...result, error, status: response.status };
+  }
+
+  return result;
 }
 
 export default function Admin() {
   const [session, setSession] = useState(undefined);
+  const [recovery, setRecovery] = useState(false);
+
   useEffect(() => {
     if (!document.getElementById("glacier-fonts")) {
       const l = document.createElement("link");
-      l.id = "glacier-fonts"; l.rel = "stylesheet";
+      l.id = "glacier-fonts";
+      l.rel = "stylesheet";
       l.href = "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap";
       document.head.appendChild(l);
     }
-    sb.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+
+    // Le lien reçu par email contient notamment #type=recovery.
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    if (hashParams.get("type") === "recovery") {
+      setRecovery(true);
+    }
+
+    sb.auth.getSession().then(({ data, error }) => {
+      if (error) console.error("Erreur de lecture de session", error);
+      setSession(data.session);
+    });
+
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+
+      if (event === "PASSWORD_RECOVERY") {
+        setRecovery(true);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const finishRecovery = async () => {
+    // Ferme les sessions existantes après le changement de mot de passe.
+    await sb.auth.signOut({ scope: "global" });
+    setRecovery(false);
+    setSession(null);
+
+    // Retire les jetons de récupération de l'URL affichée.
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
+
   if (session === undefined) return <Center>Chargement…</Center>;
+  if (recovery && session) return <ResetPassword onDone={finishRecovery} />;
   if (!session) return <Login />;
-  return <Dashboard onLogout={() => sb.auth.signOut()} />;
+
+  return <Dashboard onLogout={() => sb.auth.signOut({ scope: "global" })} />;
 }
 
 const Center = ({ children }) => (
@@ -53,27 +125,184 @@ const Center = ({ children }) => (
 const inp = { width: "100%", padding: "11px 12px", border: `1px solid ${C.line}`, borderRadius: 10, fontSize: 15, boxSizing: "border-box", marginTop: 6 };
 const btn = (bg = C.blue) => ({ background: bg, color: "#fff", border: 0, borderRadius: 10, padding: "12px 18px", fontWeight: 700, cursor: "pointer", fontSize: 15 });
 
+// ---------- RÉINITIALISATION DU MOT DE PASSE ----------
+function ResetPassword({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const updatePassword = async () => {
+    setErr("");
+
+    if (password.length < 8) {
+      setErr("Le mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+
+    if (password !== confirmation) {
+      setErr("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await sb.auth.updateUser({ password });
+    setLoading(false);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+
+    alert("Votre mot de passe a été modifié. Vous pouvez maintenant vous reconnecter.");
+    await onDone();
+  };
+
+  return (
+    <Center>
+      <div style={{ width: 360, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: 24 }}>
+        <h2 style={{ color: C.blueDk, marginTop: 0, fontFamily: FONT_TITLE, letterSpacing: "-.4px" }}>Nouveau mot de passe</h2>
+        <p style={{ color: C.muted, marginTop: 0, fontSize: 14 }}>
+          Choisissez le nouveau mot de passe de votre compte administrateur.
+        </p>
+
+        <input
+          style={inp}
+          type="password"
+          placeholder="Nouveau mot de passe"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+        />
+        <div style={{ height: 10 }} />
+        <input
+          style={inp}
+          type="password"
+          placeholder="Confirmer le mot de passe"
+          value={confirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
+          autoComplete="new-password"
+          onKeyDown={(e) => e.key === "Enter" && updatePassword()}
+        />
+
+        {err && <p style={{ color: C.bad, fontSize: 14 }}>{err}</p>}
+        <div style={{ height: 14 }} />
+        <button style={{ ...btn(), width: "100%", opacity: loading ? 0.7 : 1 }} onClick={updatePassword} disabled={loading}>
+          {loading ? "Enregistrement…" : "Enregistrer le mot de passe"}
+        </button>
+      </div>
+    </Center>
+  );
+}
+
 // ---------- LOGIN ----------
 function Login() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const login = async () => {
     setErr("");
-    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-    if (error) setErr(error.message);
+    setInfo("");
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !pw) {
+      setErr("Veuillez renseigner l'adresse email et le mot de passe.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await sb.auth.signInWithPassword({
+      email: cleanEmail,
+      password: pw,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErr(
+        error.message === "Invalid login credentials"
+          ? "Adresse email ou mot de passe incorrect."
+          : error.message
+      );
+    }
   };
+
+  const forgotPassword = async () => {
+    setErr("");
+    setInfo("");
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErr("Saisissez votre adresse email avant de demander un nouveau mot de passe.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await sb.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: PASSWORD_REDIRECT_URL,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+
+    setInfo("Un email de réinitialisation vient de vous être envoyé.");
+  };
+
   return (
     <Center>
       <div style={{ width: 360, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: 24 }}>
         <h2 style={{ color: C.blueDk, marginTop: 0, fontFamily: FONT_TITLE, letterSpacing: "-.4px" }}>Administration</h2>
         <p style={{ color: C.muted, marginTop: 0, fontSize: 14 }}>Les Cimes du Val d'Allos</p>
-        <input style={inp} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+
+        <input
+          style={inp}
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+        />
         <div style={{ height: 10 }} />
-        <input style={inp} type="password" placeholder="Mot de passe" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} />
+        <input
+          style={inp}
+          type="password"
+          placeholder="Mot de passe"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          autoComplete="current-password"
+          onKeyDown={(e) => e.key === "Enter" && login()}
+        />
+
         {err && <p style={{ color: C.bad, fontSize: 14 }}>{err}</p>}
+        {info && <p style={{ color: C.ok, fontSize: 14 }}>{info}</p>}
+
         <div style={{ height: 14 }} />
-        <button style={{ ...btn(), width: "100%" }} onClick={login}>Se connecter</button>
+        <button style={{ ...btn(), width: "100%", opacity: loading ? 0.7 : 1 }} onClick={login} disabled={loading}>
+          {loading ? "Chargement…" : "Se connecter"}
+        </button>
+
+        <button
+          type="button"
+          onClick={forgotPassword}
+          disabled={loading}
+          style={{
+            width: "100%",
+            background: "none",
+            border: 0,
+            marginTop: 14,
+            color: C.blue,
+            cursor: "pointer",
+            fontSize: 13,
+            textDecoration: "underline",
+          }}
+        >
+          Mot de passe oublié ?
+        </button>
       </div>
     </Center>
   );
