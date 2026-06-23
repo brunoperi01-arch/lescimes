@@ -1,7 +1,20 @@
 {
   "rewrites": [
-    { "source": "/confidentialite", "destination": "/confidentialite.html" },
-    { "source": "/admin", "destination": "/index.html" },
-    { "source": "/a/:path*", "destination": "/index.html" }
+    {
+      "source": "/confidentialite",
+      "destination": "/confidentialite.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin-dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/a/:path*",
+      "destination": "/index.html"
+    }
   ]
 }
