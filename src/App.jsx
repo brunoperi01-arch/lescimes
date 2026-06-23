@@ -129,10 +129,11 @@ function Identify({ onAuth }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
-      <div style={{ maxWidth: 420, width: "100%" }}>
-        <h1 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 24, marginBottom: 4, letterSpacing: "-.5px" }}>Bienvenue</h1>
-        <p style={{ color: C.muted, marginTop: 0 }}>Renseignez votre séjour pour accéder à votre espace.</p>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "0 0 32px", fontFamily: FONT_BODY }}>
+      <div style={{ maxWidth: 440, width: "100%" }}>
+        <Hero titre="Bienvenue" sousTitre="Les Cimes du Val d'Allos" />
+        <div style={{ padding: "0 16px", marginTop: -18 }}>
+        <p style={{ color: C.muted, margin: "0 0 12px", fontSize: 14, textAlign: "center" }}>Renseignez votre séjour pour accéder à votre espace.</p>
         <Card>
           <label style={label}>Appartement <span style={{ color: C.bad }}>*</span>
             <select style={inp} value={apId} onChange={(e) => setApId(e.target.value)}>
@@ -164,12 +165,39 @@ function Identify({ onAuth }) {
           </button>
         </Card>
         <Vitrine />
+        </div>
       </div>
     </div>
   );
 }
 
-// Vitrine publique (activités seulement) affichée sur la page d'ouverture
+// En-tête héros : bandeau teal avec icône cime (SVG inline, pas de dépendance)
+function Hero({ titre, sousTitre }) {
+  return (
+    <div style={{ background: C.blue, padding: "26px 20px 34px", textAlign: "center", borderRadius: "0 0 22px 22px", position: "relative" }}>
+      <div style={{ width: 54, height: 54, margin: "0 auto 10px", background: "rgba(255,255,255,.15)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 20h18L14 6l-3 5-2-3z" />
+        </svg>
+      </div>
+      <div style={{ color: "#fff", fontSize: 22, fontFamily: FONT_TITLE, letterSpacing: "-.3px" }}>{titre}</div>
+      {sousTitre && <div style={{ color: "#cfe6ea", fontSize: 12, marginTop: 3 }}>{sousTitre}</div>}
+    </div>
+  );
+}
+
+// Écran de remerciement chaleureux (fin EDL, satisfaction…)
+function Merci({ message }) {
+  return (
+    <Card style={{ textAlign: "center", padding: "32px 20px" }}>
+      <div style={{ width: 60, height: 60, margin: "0 auto 14px", background: "#e1f5ee", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0f6e56" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+      </div>
+      <div style={{ fontSize: 18, fontFamily: FONT_TITLE, color: C.blueDk }}>Merci !</div>
+      <p style={{ fontSize: 14, color: C.muted, margin: "6px 0 0", lineHeight: 1.6 }}>{message}</p>
+    </Card>
+  );
+}
 function Vitrine() {
   const [activites, setActivites] = useState([]);
   useEffect(() => {
@@ -220,13 +248,11 @@ function EDL({ token }) {
 
   // Écran final (confirmation / photos)
   if (done && !PHOTOS_EDL) return (
-    <Card><b style={{ color: C.ok, fontSize: 18 }}>✓ État des lieux enregistré</b>
-      <p style={{ color: C.muted, marginBottom: 0 }}>Merci. Une copie reste consultable par la résidence.</p></Card>
+    <Merci message="Votre état des lieux est enregistré. Profitez bien de votre séjour à la montagne." />
   );
   if (done) return (
     <>
-      <Card><b style={{ color: C.ok, fontSize: 18 }}>✓ État des lieux enregistré</b>
-        <p style={{ color: C.muted, marginBottom: 0 }}>Ajoutez des photos par pièce (optionnel mais recommandé).</p></Card>
+      <Merci message="Votre état des lieux est enregistré. Ajoutez des photos par pièce si vous le souhaitez (optionnel)." />
       {pieces.map((p, i) => (
         <Card key={i}><b>{p.piece}</b><PhotoUpload token={token} edlId={edlId} piece={p.piece} /></Card>
       ))}
@@ -510,7 +536,7 @@ function Satisfaction({ token }) {
     });
     if (r.ok) setSent(true); else alert(r.error);
   };
-  if (sent) return <Card><b style={{ color: C.ok }}>✓ Merci pour votre retour.</b><p style={{ color: C.muted }}>Vos réponses nous aident à améliorer la résidence.</p></Card>;
+  if (sent) return <Merci message="Vos réponses nous aident à améliorer la résidence. À très bientôt aux Cimes du Val d'Allos." />;
 
   return (
     <Card>
