@@ -907,7 +907,7 @@ function ActivitesAdmin() {
   );
 }
 
-// Compression image côté client (réutilisée pour les activités)
+// Compression image côté client (réutilisée pour les activités ET les promos)
 function compressImage(file) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -923,15 +923,30 @@ function compressImage(file) {
   });
 }
 
-// ---------- GESTION DES PROMOS PARTENAIRES ----------
-const VIDE = { partenaire: "", titre: "", description: "", code_promo: "", logo_url: "", lien: "", date_debut: "", date_fin: "", valide: false, ordre: 0 };
+// ---------- GESTION DES PROMOS PARTENAIRES (avec upload photo) ----------
+const VIDE = { partenaire: "", titre: "", description: "", code_promo: "", logo_url: "", image_url: "", lien: "", date_debut: "", date_fin: "", valide: false, ordre: 0 };
 function PromosAdmin() {
   const [list, setList] = useState(null);
   const [form, setForm] = useState(null); // null = pas d'édition, sinon objet promo
+  const [uploading, setUploading] = useState(false);
   const lblStyle = { fontSize: 13, fontWeight: 700, color: C.muted };
 
   const load = () => adminFn("admin-promos-list").then((r) => setList(r.promos || []));
   useEffect(() => { load(); }, []);
+
+  // Compression + upload vers le bucket public via URL signée (même Edge Function que les activités)
+  const uploadPhoto = async (file) => {
+    setUploading(true);
+    try {
+      const blob = await compressImage(file);
+      const r = await adminFn("admin-img-upload-url", { ext: "jpg" });
+      if (!r.signedUrl) throw new Error(r.error || "URL refusée");
+      const up = await fetch(r.signedUrl, { method: "PUT", headers: { "content-type": "image/jpeg" }, body: blob });
+      if (!up.ok) throw new Error("Upload échoué");
+      setForm((f) => ({ ...f, image_url: r.publicUrl }));
+    } catch (e) { alert("Erreur upload : " + e.message); }
+    setUploading(false);
+  };
 
   const save = async () => {
     if (!form.partenaire.trim() || !form.titre.trim()) { alert("Partenaire et titre obligatoires."); return; }
@@ -963,6 +978,15 @@ function PromosAdmin() {
         </label>
         {F("code_promo", "Code promo")}
         {F("logo_url", "URL du logo")}
+        {/* Photo */}
+        <div style={{ marginBottom: 14 }}>
+          <span style={lblStyle}>Photo de l'offre</span>
+          {form.image_url && <img src={form.image_url} alt="" style={{ display: "block", width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10, margin: "8px 0" }} />}
+          <label style={{ ...btn("#e8eff0"), color: C.blue, display: "inline-block", padding: "10px 14px", fontSize: 14, marginTop: 6 }}>
+            {uploading ? "Envoi…" : form.image_url ? "Changer la photo" : "Ajouter une photo"}
+            <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadPhoto(e.target.files[0])} style={{ display: "none" }} />
+          </label>
+        </div>
         {F("lien", "Lien (réservation/site)")}
         <div style={{ display: "flex", gap: 12 }}>
           <div style={{ flex: 1 }}>{F("date_debut", "Début", "date")}</div>
@@ -987,8 +1011,11 @@ function PromosAdmin() {
         : list.length === 0 ? <p style={{ color: C.muted }}>Aucune promo. Cliquez sur « + Nouvelle promo ».</p>
         : <div style={{ display: "grid", gap: 12 }}>
             {list.map((p) => (
-              <div key={p.id} style={{ background: C.card, border: `1px solid ${p.valide ? C.ok : C.line}`, borderRadius: 12, padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div key={p.id} style={{ background: C.card, border: `1px solid ${p.valide ? C.ok : C.line}`, borderRadius: 12, padding: 16, display: "flex", gap: 12, alignItems: "center" }}>
+                {p.image_url
+                  ? <img src={p.image_url} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                  : <div style={{ width: 64, height: 64, borderRadius: 8, background: C.bg, flexShrink: 0 }} />}
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, flex: 1 }}>
                   <div>
                     <span style={{ fontSize: 12, color: p.valide ? C.ok : C.warn, fontWeight: 700 }}>{p.valide ? "● PUBLIÉE" : "○ EN ATTENTE"}</span>
                     <b style={{ color: C.blueDk, display: "block" }}>{p.titre}</b>
