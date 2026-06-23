@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 // CONFIG — clés PUBLIQUES (anon) : OK ici, Auth seulement. Les données
 // passent par les Edge Functions qui vérifient le rôle admin.
 // =====================================================================
-const SUPABASE_URL = "https://wmwxgrhlcqluzejdolje.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtd3hncmhsY3FsdXplamRvbGplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MzQwODUsImV4cCI6MjA5NzQxMDA4NX0.PvMHdXPc6fOmXBGaOzW21aoCz4kqOMZ7no_d5-ykZ98";  // la clé anon public que tu viens de copier
+const SUPABASE_URL = "https://TON-PROJET.supabase.co";
+const SUPABASE_ANON = "TON_ANON_KEY"; // anon = login uniquement, aucune table lisible
 const FN = `${SUPABASE_URL}/functions/v1`;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -167,6 +167,7 @@ function Dashboard({ onLogout }) {
               <KPI label="NPS" val={k.nps ?? "—"} color={k.nps >= 50 ? C.ok : k.nps >= 0 ? C.warn : C.bad} suffix="" />
               <KPI label="Incidents ouverts" val={k.incidents_ouverts} color={k.incidents_ouverts ? C.bad : C.ok} />
             </div>
+            <NpsTrend reponses={data?.satisfaction || []} />
             <h3 style={{ color: C.blueDk, marginTop: 28, fontFamily: FONT_TITLE, fontSize: 16, letterSpacing: "-.3px" }}>Notes moyennes (sur 5)</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14 }}>
               <KPI label="Accueil" val={k.note_accueil ?? "—"} color={C.gold} />
@@ -278,6 +279,55 @@ function Dashboard({ onLogout }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Graphique d'évolution du NPS par mois (barres CSS, sans librairie)
+function NpsTrend({ reponses }) {
+  // Regroupe par mois (AAAA-MM), calcule le NPS de chaque mois
+  const parMois = {};
+  for (const r of reponses) {
+    if (r.nps == null || !r.created_at) continue;
+    const mois = r.created_at.slice(0, 7);
+    (parMois[mois] = parMois[mois] || []).push(r.nps);
+  }
+  const mois = Object.keys(parMois).sort();
+  if (mois.length < 2) return null; // pas d'évolution à montrer avec < 2 mois
+
+  const nps = (arr) => {
+    const prom = arr.filter((n) => n >= 9).length, det = arr.filter((n) => n <= 6).length;
+    return Math.round(((prom - det) / arr.length) * 100);
+  };
+  const series = mois.map((m) => ({ mois: m, nps: nps(parMois[m]) }));
+  const labelMois = (m) => {
+    const [a, mo] = m.split("-");
+    return ["jan", "fév", "mar", "avr", "mai", "juin", "juil", "août", "sep", "oct", "nov", "déc"][+mo - 1] + " " + a.slice(2);
+  };
+  const barColor = (n) => n >= 50 ? C.ok : n >= 0 ? C.warn : C.bad;
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <h3 style={{ color: C.blueDk, fontFamily: FONT_TITLE, fontSize: 16, letterSpacing: "-.3px", marginBottom: 12 }}>Évolution du NPS</h3>
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "18px 16px" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 120 }}>
+          {series.map((s) => {
+            // NPS va de -100 à +100 ; hauteur relative sur 0..100% de la zone
+            const h = Math.max(4, ((s.nps + 100) / 200) * 100);
+            return (
+              <div key={s.mois} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: barColor(s.nps), marginBottom: 4 }}>{s.nps}</span>
+                <div style={{ width: "100%", maxWidth: 48, height: `${h}%`, background: barColor(s.nps), borderRadius: "6px 6px 0 0", transition: "height .3s" }} />
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          {series.map((s) => (
+            <div key={s.mois} style={{ flex: 1, textAlign: "center", fontSize: 11, color: C.muted }}>{labelMois(s.mois)}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
