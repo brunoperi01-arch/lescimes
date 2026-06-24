@@ -281,26 +281,54 @@ function Merci({ message }) {
     </Card>
   );
 }
+// Parse une date locale (évite le décalage de fuseau de new Date("YYYY-MM-DD"))
+const jourLocal = (d) => {
+  if (!d) return null;
+  if (typeof d === "string") { const [y, m, j] = d.slice(0, 10).split("-").map(Number); return new Date(y, m - 1, j); }
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+// Vitrine : UNE activité par jour. On affiche celle du jour ;
+// à défaut, la prochaine animation programmée à venir.
 function Vitrine() {
-  const [activites, setActivites] = useState([]);
+  const [activite, setActivite] = useState(null);
+  const [estAujourdhui, setEstAujourdhui] = useState(true);
   useEffect(() => {
-    post("get-activites", {}).then((r) => setActivites(r.activites || []));
+    post("get-activites", {}).then((r) => {
+      const t = (d) => { const x = jourLocal(d); return x ? x.getTime() : null; };
+      const auj = t(new Date());
+      const prog = (r.activites || []).filter((a) => a.date_jour);
+      let choisie = prog.find((a) => t(a.date_jour) === auj);
+      let aujd = true;
+      if (!choisie) {
+        const futures = prog.filter((a) => t(a.date_jour) > auj).sort((a, b) => t(a.date_jour) - t(b.date_jour));
+        choisie = futures[0] || null;
+        aujd = false;
+      }
+      setActivite(choisie);
+      setEstAujourdhui(aujd);
+    });
   }, []);
-  if (activites.length === 0) return null;
+  if (!activite) return null;
+  const a = activite;
+  const dateFr = a.date_jour
+    ? jourLocal(a.date_jour).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+    : null;
   return (
     <div style={{ marginTop: 24 }}>
-      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 10px" }}>À faire dans la vallée</h2>
-      {activites.map((a, i) => (
-        <Card key={`a${i}`} style={{ padding: 0, overflow: "hidden" }}>
-          {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
-          <div style={{ padding: 16 }}>
-            {a.categorie && <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }}>{a.categorie}</span>}
-            <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 16, letterSpacing: "-.3px", margin: "4px 0" }}>{a.titre}</div>
-            <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>{a.description}</p>
-            {a.lien && <a href={a.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14 }}>En savoir plus →</a>}
-          </div>
-        </Card>
-      ))}
+      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 4px" }}>
+        {estAujourdhui ? "Activité du jour" : "Prochaine animation"}
+      </h2>
+      {dateFr && <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px", textTransform: "capitalize" }}>{dateFr}</p>}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
+        <div style={{ padding: 16 }}>
+          {a.categorie && <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }}>{a.categorie}</span>}
+          <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 16, letterSpacing: "-.3px", margin: "4px 0" }}>{a.titre}</div>
+          <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>{a.description}</p>
+          {a.lien && <a href={a.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14 }}>En savoir plus →</a>}
+        </div>
+      </Card>
     </div>
   );
 }
