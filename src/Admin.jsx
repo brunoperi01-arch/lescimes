@@ -812,7 +812,8 @@ const Section = ({ titre, children }) => (
 const Vide = () => <span style={{ color: C.muted, fontSize: 13 }}>Aucune donnée.</span>;
 
 // ---------- GESTION DES ACTIVITÉS (avec upload photo) ----------
-const VIDE_ACT = { titre: "", description: "", categorie: "", image_url: "", lien: "", actif: true, ordre: 0 };
+// date_jour : jour de programmation. UNE activité par jour côté client.
+const VIDE_ACT = { titre: "", description: "", categorie: "", image_url: "", lien: "", actif: true, ordre: 0, date_jour: "" };
 function ActivitesAdmin() {
   const [list, setList] = useState(null);
   const [form, setForm] = useState(null);
@@ -852,6 +853,10 @@ function ActivitesAdmin() {
         </label>
         <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Catégorie
           <input style={inp} value={form.categorie || ""} onChange={(e) => setForm({ ...form, categorie: e.target.value })} placeholder="ex. Randonnée, Famille, Restauration" />
+        </label>
+        <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Date de programmation
+          <input style={inp} type="date" value={form.date_jour || ""} onChange={(e) => setForm({ ...form, date_jour: e.target.value })} />
+          <span style={{ fontWeight: 400, fontSize: 12, color: C.muted, display: "block", marginTop: 4 }}>Jour où cette activité s'affiche côté client. Laissez vide pour ne pas la programmer.</span>
         </label>
         <label style={{ ...lblStyle, display: "block", marginBottom: 10 }}>Description
           <textarea style={{ ...inp, minHeight: 70 }} value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -894,10 +899,15 @@ function ActivitesAdmin() {
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 12, color: a.actif ? C.ok : C.warn, fontWeight: 700 }}>{a.actif ? "● VISIBLE" : "○ MASQUÉE"}</span>
                   <b style={{ color: C.blueDk, display: "block" }}>{a.titre}</b>
-                  <span style={{ color: C.muted, fontSize: 13 }}>{a.categorie}</span>
+                  <span style={{ color: C.muted, fontSize: 13 }}>
+                    {a.categorie}
+                    {a.date_jour
+                      ? <> · <b style={{ color: C.blue }}>{fdate(a.date_jour)}</b></>
+                      : <span style={{ color: C.warn }}> · non programmée</span>}
+                  </span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button style={{ ...btn("#e8eff0"), color: C.blue, padding: "6px 10px", fontSize: 13 }} onClick={() => setForm({ ...a })}>Modifier</button>
+                  <button style={{ ...btn("#e8eff0"), color: C.blue, padding: "6px 10px", fontSize: 13 }} onClick={() => setForm({ ...a, date_jour: a.date_jour || "" })}>Modifier</button>
                   <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "6px 10px", fontSize: 13 }} onClick={() => del(a.id)}>Suppr.</button>
                 </div>
               </div>
