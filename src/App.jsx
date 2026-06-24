@@ -76,6 +76,32 @@ export default function App() {
   });
   const [tab, setTab] = useState("edl");
 
+  // Statut serveur des modules déjà enregistrés pour ce séjour.
+  // null = en cours de chargement (on affiche un loader, pas le formulaire)
+  // {}   = endpoint absent/en erreur -> dégradé gracieux : rien n'est verrouillé
+  // {edl:{entree,sortie}, midstay, satisfaction} = valeurs = date ISO (ou null)
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    if (!token) { setStatus(null); return; }
+    let annule = false;
+    post("sejour-status", { token }).then((r) => {
+      if (annule) return;
+      setStatus(r && !r.error ? r : {}); // pas de verrou si le serveur ne répond pas
+    });
+    return () => { annule = true; };
+  }, [token]);
+
+  // Marque un module comme enregistré localement après une soumission réussie,
+  // pour verrouiller immédiatement sans ré-interroger le serveur.
+  const markDone = (mod, type) => setStatus((s) => {
+    const next = { ...(s || {}) };
+    const now = new Date().toISOString();
+    if (mod === "edl") next.edl = { ...(next.edl || {}), [type]: now };
+    else next[mod] = now;
+    return next;
+  });
+
   const handleAuth = (t) => {
     try { localStorage.setItem(TOKEN_KEY, t); } catch {}
     setToken(t);
@@ -86,6 +112,8 @@ export default function App() {
   };
 
   if (!token) return <Identify onAuth={handleAuth} />;
+
+  const chargement = status === null;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif", color: C.text }}>
@@ -112,10 +140,10 @@ export default function App() {
       </nav>
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: 16 }}>
-        {tab === "edl" && <EDL token={token} />}
+        {tab === "edl" && <EDL token={token} statusEdl={status?.edl} loading={chargement} onDone={(t) => markDone("edl", t)} />}
         {tab === "incident" && <Incident token={token} />}
-        {tab === "midstay" && <MidStay token={token} />}
-        {tab === "satis" && <Satisfaction token={token} />}
+        {tab === "midstay" && <MidStay token={token} dejaFait={status?.midstay} loading={chargement} onDone={() => markDone("midstay")} />}
+        {tab === "satis" && <Satisfaction token={token} dejaFait={status?.satisfaction} loading={chargement} onDone={() => markDone("satisfaction")} />}
         {tab === "activites" && <Activites />}
       </main>
     </div>
@@ -129,6 +157,25 @@ const Card = ({ children, style }) => (
 const btn = (bg = C.blue) => ({ background: bg, color: "#fff", border: 0, borderRadius: 10, padding: "13px 18px", fontWeight: 700, cursor: "pointer", width: "100%", fontSize: 15 });
 const inp = { width: "100%", padding: "11px 12px", border: `1px solid ${C.line}`, borderRadius: 10, fontSize: 15, boxSizing: "border-box", marginTop: 6 };
 const label = { fontSize: 13, fontWeight: 700, color: C.muted };
+
+// Petit loader pendant que le statut serveur arrive
+const Chargement = () => <Card style={{ color: C.muted, textAlign: "center" }}>Chargement…</Card>;
+
+// Carte "verrouillé" : module déjà enregistré, non modifiable
+function VerrouCard({ titre, message, date }) {
+  return (
+    <Card style={{ textAlign: "center", padding: "30px 20px" }}>
+      <div style={{ width: 60, height: 60, margin: "0 auto 14px", background: "#eef5f6", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      </div>
+      <div style={{ fontSize: 16, fontFamily: FONT_TITLE, color: C.blueDk, letterSpacing: "-.3px" }}>{titre}</div>
+      {message && <p style={{ fontSize: 14, color: C.muted, margin: "8px 0 0", lineHeight: 1.6 }}>{message}</p>}
+      {date && <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0" }}>Enregistré le {new Date(date).toLocaleDateString("fr-FR")}</p>}
+    </Card>
+  );
+}
 
 // =====================================================================
 // ÉCRAN 0 — IDENTIFICATION (après scan du QR)
@@ -258,7 +305,9 @@ function Vitrine() {
   );
 }
 // =====================================================================
-function EDL({ token }) {
+// MODULE EDL — verrouillé par type (entrée / sortie) une fois enregistré
+// =====================================================================
+function EDL({ token, statusEdl, loading, onDone }) {
   const [type, setType] = useState("entree");
   const [par, setPar] = useState("client");
   const [pieces, setPieces] = useState(PIECES_DEFAUT.map((p) => ({ piece: p, etat: null, commentaire: "" })));
@@ -275,12 +324,17 @@ function EDL({ token }) {
   const toutesEvaluees = pieces.every((p) => p.etat !== null);
 
   const submit = async () => {
+    if (statusEdl?.[type]) return; // garde-fou : type déjà enregistré
     setSending(true);
     const signature = sigRef.current?.toDataURL?.() || null;
     const r = await post("submit-edl", { token, type, rempli_par: par, signature, commentaire_general: gen, pieces });
     setSending(false);
-    if (r.ok) { setEdlId(r.edl_id); setDone(true); } else alert(r.error);
+    if (r.ok) { setEdlId(r.edl_id); setDone(true); onDone?.(type); }
+    else if (r.dejaFait) { onDone?.(type); } // la base a refusé un doublon -> on verrouille
+    else alert(r.error);
   };
+
+  if (loading && !done) return <Chargement />;
 
   // Écran final (confirmation / photos)
   if (done && !PHOTOS_EDL) return (
@@ -312,29 +366,42 @@ function EDL({ token }) {
   // Boutons de navigation (cibles ≥ 50px)
   const navBtn = (bg, color) => ({ flex: 1, padding: "15px", borderRadius: 12, border: 0, fontWeight: 700, fontSize: 16, cursor: "pointer", background: bg, color, minHeight: 52 });
 
-  // ÉTAPE 0 : intro (type + rempli par)
-  if (step === 0) return (
-    <>
-      <Progress />
-      <Card>
-        <span style={label}>Type d'état des lieux</span>
-        <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-          {[["entree", "Entrée"], ["sortie", "Sortie"]].map(([k, l]) => (
-            <button key={k} onClick={() => setType(k)} style={{ ...navBtn(type === k ? C.blue : "#eef5f6", type === k ? "#fff" : C.muted) }}>{l}</button>
-          ))}
-        </div>
-        <div style={{ height: 16 }} />
-        <label style={label}>Rempli par
-          <select style={{ ...inp, minHeight: 50 }} value={par} onChange={(e) => setPar(e.target.value)}>
-            <option value="client">Le client</option>
-            <option value="staff">Avec le personnel</option>
-          </select>
-        </label>
-        <div style={{ height: 18 }} />
-        <button style={navBtn(C.blue, "#fff")} onClick={() => setStep(1)}>Commencer →</button>
-      </Card>
-    </>
-  );
+  // ÉTAPE 0 : intro (type + rempli par) — gère le verrouillage par type
+  if (step === 0) {
+    const verrouille = statusEdl?.[type];
+    return (
+      <>
+        <Progress />
+        <Card>
+          <span style={label}>Type d'état des lieux</span>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            {[["entree", "Entrée"], ["sortie", "Sortie"]].map(([k, l]) => (
+              <button key={k} onClick={() => setType(k)} style={{ ...navBtn(type === k ? C.blue : "#eef5f6", type === k ? "#fff" : C.muted) }}>
+                {l}{statusEdl?.[k] ? "  🔒" : ""}
+              </button>
+            ))}
+          </div>
+          {verrouille ? (
+            <div style={{ marginTop: 16, padding: 14, background: "#eef5f6", borderRadius: 12, color: C.muted, fontSize: 14, lineHeight: 1.6 }}>
+              🔒 L'état des lieux <b>{type === "entree" ? "d'entrée" : "de sortie"}</b> a déjà été enregistré le {new Date(verrouille).toLocaleDateString("fr-FR")}. Il ne peut plus être modifié. Pour toute correction, contactez la résidence.
+            </div>
+          ) : (
+            <>
+              <div style={{ height: 16 }} />
+              <label style={label}>Rempli par
+                <select style={{ ...inp, minHeight: 50 }} value={par} onChange={(e) => setPar(e.target.value)}>
+                  <option value="client">Le client</option>
+                  <option value="staff">Avec le personnel</option>
+                </select>
+              </label>
+              <div style={{ height: 18 }} />
+              <button style={navBtn(C.blue, "#fff")} onClick={() => setStep(1)}>Commencer →</button>
+            </>
+          )}
+        </Card>
+      </>
+    );
+  }
 
   // ÉTAPES 1..N : une pièce à la fois
   if (step <= N) {
@@ -482,6 +549,9 @@ function PhotoUpload({ token, edlId, piece }) {
     </div>
   );
 }
+
+// Incidents : NON verrouillé volontairement — un client peut signaler
+// plusieurs soucis au cours de son séjour.
 function Incident({ token }) {
   const [cat, setCat] = useState("Équipement");
   const [msg, setMsg] = useState("");
@@ -509,9 +579,9 @@ function Incident({ token }) {
 }
 
 // =====================================================================
-// MODULE 3a — MID-STAY (enquête courte pendant le séjour)
+// MODULE 3a — MID-STAY — verrouillé après envoi
 // =====================================================================
-function MidStay({ token }) {
+function MidStay({ token, dejaFait, loading, onDone }) {
   const Q = [
     ["logement_ok", "Le logement correspond à vos attentes ?"],
     ["equipements_ok", "Les équipements fonctionnent correctement ?"],
@@ -521,9 +591,12 @@ function MidStay({ token }) {
   const [com, setCom] = useState("");
   const [sent, setSent] = useState(false);
   const submit = async () => {
+    if (dejaFait) return;
     const r = await post("submit-midstay", { token, ...rep, commentaire: com });
-    if (r.ok) setSent(true); else alert(r.error);
+    if (r.ok || r.dejaFait) { setSent(true); onDone?.(); } else alert(r.error);
   };
+  if (loading) return <Chargement />;
+  if (dejaFait && !sent) return <VerrouCard titre="Enquête mi-séjour déjà envoyée" message="Merci, vos réponses sont bien enregistrées." date={dejaFait} />;
   if (sent) return <Card><b style={{ color: C.ok }}>✓ Merci !</b><p style={{ color: C.muted }}>Si vous avez signalé un point à améliorer, la résidence intervient au plus vite.</p></Card>;
   return (
     <Card>
@@ -550,9 +623,9 @@ function MidStay({ token }) {
 }
 
 // =====================================================================
-// MODULE 3b — SATISFACTION POST-SÉJOUR (100% INTERNE, critères 1-5 + NPS)
+// MODULE 3b — SATISFACTION POST-SÉJOUR — verrouillé après envoi
 // =====================================================================
-function Satisfaction({ token }) {
+function Satisfaction({ token, dejaFait, loading, onDone }) {
   const CRIT = [
     ["note_accueil", "Accueil"],
     ["note_proprete", "Propreté"],
@@ -567,11 +640,14 @@ function Satisfaction({ token }) {
   const [sent, setSent] = useState(false);
 
   const submit = async () => {
+    if (dejaFait) return;
     const r = await post("submit-satisfaction", {
       token, ...notes, nps, point_positif: pos, point_amelioration: amel,
     });
-    if (r.ok) setSent(true); else alert(r.error);
+    if (r.ok || r.dejaFait) { setSent(true); onDone?.(); } else alert(r.error);
   };
+  if (loading) return <Chargement />;
+  if (dejaFait && !sent) return <VerrouCard titre="Avis déjà envoyé" message="Merci, votre avis est bien enregistré. À très bientôt aux Cimes du Val d'Allos." date={dejaFait} />;
   if (sent) return <Merci message="Vos réponses nous aident à améliorer la résidence. À très bientôt aux Cimes du Val d'Allos." />;
 
   return (
