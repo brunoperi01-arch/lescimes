@@ -292,34 +292,28 @@ const jourLocal = (d) => {
 // à défaut, la prochaine animation programmée à venir.
 function Vitrine() {
   const [activite, setActivite] = useState(null);
-  const [estAujourdhui, setEstAujourdhui] = useState(true);
   useEffect(() => {
     post("get-activites", {}).then((r) => {
       const t = (d) => { const x = jourLocal(d); return x ? x.getTime() : null; };
       const auj = t(new Date());
       const prog = (r.activites || []).filter((a) => a.date_jour);
+      // activité du jour ; à défaut, la prochaine programmée à venir
       let choisie = prog.find((a) => t(a.date_jour) === auj);
-      let aujd = true;
       if (!choisie) {
         const futures = prog.filter((a) => t(a.date_jour) > auj).sort((a, b) => t(a.date_jour) - t(b.date_jour));
         choisie = futures[0] || null;
-        aujd = false;
       }
       setActivite(choisie);
-      setEstAujourdhui(aujd);
     });
   }, []);
   if (!activite) return null;
   const a = activite;
-  const dateFr = a.date_jour
-    ? jourLocal(a.date_jour).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
-    : null;
   return (
     <div style={{ marginTop: 24 }}>
-      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 4px" }}>
-        {estAujourdhui ? "Activité du jour" : "Prochaine animation"}
+      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 2px" }}>
+        Idées sorties
       </h2>
-      {dateFr && <p style={{ color: C.muted, fontSize: 13, margin: "0 0 10px", textTransform: "capitalize" }}>{dateFr}</p>}
+      <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>À voir, à vivre, à faire</p>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
         <div style={{ padding: 16 }}>
