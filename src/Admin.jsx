@@ -696,6 +696,14 @@ function SejoursAdmin({ apparts }) {
     if (r.ok) load(); else alert(r.error);
   };
 
+  const del = async (s) => {
+    const qui = s.nom_client || s.email || "ce client";
+    if (!confirm(`Supprimer définitivement le séjour de « ${qui} » (arrivée ${fdate(s.date_arrivee)}) ?\n\nCela efface aussi son état des lieux, ses incidents et ses enquêtes. Action irréversible.`)) return;
+    const r = await adminFn("admin-sejour-delete", { sejour_id: s.id });
+    if (r.error) { alert(r.error); return; }
+    load();
+  };
+
   const filtered = (list || []).filter((s) =>
     !q || (s.nom_client || "").toLowerCase().includes(q.toLowerCase())
        || (s.email || "").toLowerCase().includes(q.toLowerCase())
@@ -727,7 +735,10 @@ function SejoursAdmin({ apparts }) {
                   </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
+                      <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "4px 10px", fontSize: 12 }} onClick={() => del(s)}>Suppr.</button>
+                    </div>
                   </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
                     <select defaultValue="" onChange={(e) => reaffect(s.id, e.target.value)}
