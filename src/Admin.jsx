@@ -842,7 +842,12 @@ function ActivitesAdmin() {
     const r = await adminFn("admin-activite-save", form);
     if (r.ok) { setForm(null); load(); } else alert(r.error);
   };
-  const del = async (id) => { if (confirm("Supprimer cette activité ?")) { await adminFn("admin-activite-delete", { id }); load(); } };
+  const del = async (id) => {
+    if (!confirm("Supprimer cette activité ?")) return;
+    const r = await adminFn("admin-activite-delete", { id });
+    if (r.error) { alert(r.error); return; }
+    load();
+  };
 
   if (form) {
     return (
@@ -965,7 +970,9 @@ function PromosAdmin() {
   };
   const del = async (id) => {
     if (!confirm("Supprimer cette promo ?")) return;
-    await adminFn("admin-promo-delete", { id }); load();
+    const r = await adminFn("admin-promo-delete", { id });
+    if (r.error) { alert(r.error); return; }
+    load();
   };
   const toggleValide = async (p) => {
     await adminFn("admin-promo-save", { ...p, valide: !p.valide }); load();
