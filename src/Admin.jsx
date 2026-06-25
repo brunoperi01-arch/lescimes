@@ -592,6 +592,20 @@ const ynbadge = (v) => v === false
   ? <span style={{ color: "#fff", background: C.bad, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Non</span>
   : v === true ? <span style={{ color: "#fff", background: C.ok, borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>Oui</span> : "—";
 
+// Jour local (sans décalage de fuseau) à partir d'une date "AAAA-MM-JJ"
+const jourSejour = (d) => { if (!d) return null; const [y, m, j] = String(d).slice(0, 10).split("-").map(Number); return new Date(y, m - 1, j).getTime(); };
+// Statut d'un séjour : À venir / En cours / Terminé
+const statutSejour = (s) => {
+  const auj = jourSejour(new Date().toISOString());
+  const arr = jourSejour(s.date_arrivee);
+  const dep = jourSejour(s.date_depart);
+  if (arr != null && arr > auj) return { label: "À venir", color: C.blue };
+  if (dep != null && dep < auj) return { label: "Terminé", color: C.muted };
+  return { label: "En cours", color: C.ok };
+};
+// Validation simple d'un email (repérage des saisies ratées)
+const emailValide = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || "").trim());
+
 // ---------- VUE D'ENSEMBLE PAR APPARTEMENT ----------
 function Overview({ onOpenAppart }) {
   const [lignes, setLignes] = useState(null);
@@ -694,14 +708,23 @@ function SejoursAdmin({ apparts }) {
       {filtered.length === 0 ? <p style={{ color: C.muted }}>Aucun séjour.</p>
         : <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
+              <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Statut", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
                 <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
-              <tbody>{filtered.map((s) => (
+              <tbody>{filtered.map((s) => {
+                const st = statutSejour(s);
+                return (
                 <tr key={s.id}>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.nom_client}</td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.email}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+                    {emailValide(s.email)
+                      ? s.email
+                      : <span style={{ color: C.bad, fontWeight: 700 }} title="Email invalide">{s.email || "—"} ⚠</span>}
+                  </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{fdate(s.date_arrivee)}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: st.color, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>{st.label}</span>
+                  </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
                     <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
@@ -714,7 +737,8 @@ function SejoursAdmin({ apparts }) {
                     </select>
                   </td>
                 </tr>
-              ))}</tbody>
+                );
+              })}</tbody>
             </table>
           </div>}
 
