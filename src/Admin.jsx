@@ -382,9 +382,9 @@ function Dashboard({ onLogout }) {
       </div>
 
       {/* Onglets */}
-      <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}` }}>
-        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"]].map(([key, l]) => (
-          <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
+      <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}`, overflowX: "auto" }}>
+        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["rdv", "RDV départ"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"]].map(([key, l]) => (
+          <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
             {key === "inc" && nbNouveaux > 0 &&
@@ -490,6 +490,7 @@ function Dashboard({ onLogout }) {
         })()}
 
         {tab === "promos" && <PromosAdmin />}
+        {tab === "rdv" && <RdvAdmin />}
         {tab === "activites" && <ActivitesAdmin />}
         {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
       </main>
@@ -845,6 +846,129 @@ const Section = ({ titre, children }) => (
   </div>
 );
 const Vide = () => <span style={{ color: C.muted, fontSize: 13 }}>Aucune donnée.</span>;
+
+// ---------- RDV ÉTAT DES LIEUX DE DÉPART (admin) ----------
+const hmm = (t) => (t || "").slice(0, 5);
+function genSlots(debut, fin) {
+  const toMin = (t) => { const p = (t || "").split(":"); return (+p[0]) * 60 + (+p[1]); };
+  const pad = (n) => String(n).padStart(2, "0");
+  const out = [];
+  for (let t = toMin(debut); t < toMin(fin); t += 15) out.push(`${pad(Math.floor(t / 60))}:${pad(t % 60)}`);
+  return out;
+}
+function RdvAdmin() {
+  const [data, setData] = useState(null);   // { jours, fermetures, reservations }
+  const [neo, setNeo] = useState({ date: "", heure_debut: "09:00", heure_fin: "12:00" });
+  const [drafts, setDrafts] = useState({}); // {jourId: {heure_debut, heure_fin}}
+  const lbl = { fontSize: 13, fontWeight: 700, color: C.muted };
+
+  const load = () => adminFn("admin-rdv-list").then(setData);
+  useEffect(() => { load(); }, []);
+
+  const ajouter = async () => {
+    if (!neo.date) { alert("Choisissez une date."); return; }
+    const r = await adminFn("admin-rdv-jour-save", neo);
+    if (r.ok) { setNeo({ date: "", heure_debut: "09:00", heure_fin: "12:00" }); load(); } else alert(r.error);
+  };
+  const majPlage = async (j) => {
+    const d = drafts[j.id] || {};
+    const r = await adminFn("admin-rdv-jour-save", { id: j.id, date: j.date, ouvert: j.ouvert, heure_debut: d.heure_debut ?? hmm(j.heure_debut), heure_fin: d.heure_fin ?? hmm(j.heure_fin) });
+    if (r.ok) load(); else alert(r.error);
+  };
+  const toggleOuvert = async (j) => {
+    const r = await adminFn("admin-rdv-jour-save", { id: j.id, date: j.date, ouvert: !j.ouvert, heure_debut: hmm(j.heure_debut), heure_fin: hmm(j.heure_fin) });
+    if (r.ok) load(); else alert(r.error);
+  };
+  const supprJour = async (j) => {
+    if (!confirm("Supprimer ce jour et ses créneaux ? (les réservations de ce jour seront aussi retirées)")) return;
+    const r = await adminFn("admin-rdv-jour-delete", { id: j.id });
+    if (r.ok) load(); else alert(r.error);
+  };
+  const toggleCreneau = async (date, heure) => {
+    const r = await adminFn("admin-rdv-fermeture-toggle", { date, heure });
+    if (r.ok) load(); else alert(r.error);
+  };
+
+  if (!data) return <p style={{ color: C.muted }}>Chargement…</p>;
+
+  const fermSet = new Set((data.fermetures || []).map((f) => `${f.date}|${f.heure}`));
+  const resaMap = {};
+  for (const r of data.reservations || []) {
+    const k = `${r.date}|${r.heure}`;
+    (resaMap[k] = resaMap[k] || []).push(r);
+  }
+  const fDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  return (
+    <div>
+      {/* Ajouter un jour */}
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0, fontSize: 15 }}>Ouvrir un jour à la réservation</h3>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+          <label style={lbl}>Date<input type="date" style={{ ...inp, width: 170 }} value={neo.date} onChange={(e) => setNeo({ ...neo, date: e.target.value })} /></label>
+          <label style={lbl}>Début<input type="time" step="900" style={{ ...inp, width: 120 }} value={neo.heure_debut} onChange={(e) => setNeo({ ...neo, heure_debut: e.target.value })} /></label>
+          <label style={lbl}>Fin<input type="time" step="900" style={{ ...inp, width: 120 }} value={neo.heure_fin} onChange={(e) => setNeo({ ...neo, heure_fin: e.target.value })} /></label>
+          <button style={{ ...btn(), width: "auto" }} onClick={ajouter}>Ouvrir ce jour</button>
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0" }}>Les créneaux de 15 min se génèrent automatiquement entre le début et la fin (3 places chacun).</p>
+      </div>
+
+      {(data.jours || []).length === 0 && <p style={{ color: C.muted }}>Aucun jour ouvert. Ajoutez-en un ci-dessus.</p>}
+
+      {(data.jours || []).map((j) => {
+        const d = drafts[j.id] || {};
+        const slots = genSlots(hmm(j.heure_debut), hmm(j.heure_fin));
+        const nbResa = slots.reduce((s, h) => s + (resaMap[`${j.date}|${h}`]?.length || 0), 0);
+        return (
+          <div key={j.id} style={{ background: C.card, border: `1px solid ${j.ouvert ? C.line : C.warn}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <div>
+                <span style={{ fontSize: 12, color: j.ouvert ? C.ok : C.warn, fontWeight: 700 }}>{j.ouvert ? "● OUVERT" : "○ FERMÉ"}</span>
+                <b style={{ color: C.blueDk, display: "block", textTransform: "capitalize" }}>{fDate(j.date)}</b>
+                <span style={{ fontSize: 13, color: C.muted }}>{nbResa} réservation{nbResa > 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ ...btn(j.ouvert ? "#e8eff0" : C.ok), color: j.ouvert ? C.muted : "#fff", width: "auto", padding: "8px 12px", fontSize: 13 }} onClick={() => toggleOuvert(j)}>{j.ouvert ? "Fermer le jour" : "Rouvrir"}</button>
+                <button style={{ ...btn("#e8eff0"), color: C.bad, width: "auto", padding: "8px 12px", fontSize: 13 }} onClick={() => supprJour(j)}>Suppr.</button>
+              </div>
+            </div>
+
+            {/* Plage horaire éditable */}
+            <div style={{ display: "flex", gap: 10, alignItems: "end", marginTop: 12, flexWrap: "wrap" }}>
+              <label style={lbl}>Début<input type="time" step="900" style={{ ...inp, width: 120 }} value={d.heure_debut ?? hmm(j.heure_debut)} onChange={(e) => setDrafts({ ...drafts, [j.id]: { ...d, heure_debut: e.target.value } })} /></label>
+              <label style={lbl}>Fin<input type="time" step="900" style={{ ...inp, width: 120 }} value={d.heure_fin ?? hmm(j.heure_fin)} onChange={(e) => setDrafts({ ...drafts, [j.id]: { ...d, heure_fin: e.target.value } })} /></label>
+              <button style={{ ...btn("#e8eff0"), color: C.blue, width: "auto", padding: "9px 14px", fontSize: 13 }} onClick={() => majPlage(j)}>Mettre à jour la plage</button>
+            </div>
+
+            {/* Créneaux générés */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Cliquez un créneau pour le fermer / rouvrir. Les noms indiquent les clients ayant réservé.</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8 }}>
+                {slots.map((h) => {
+                  const ferme = fermSet.has(`${j.date}|${h}`);
+                  const occ = resaMap[`${j.date}|${h}`] || [];
+                  return (
+                    <div key={h} onClick={() => toggleCreneau(j.date, h)}
+                      style={{ cursor: "pointer", border: `1px solid ${ferme ? C.bad : C.line}`, borderRadius: 8, padding: "8px 10px",
+                        background: ferme ? "#fcebeb" : "#fff", opacity: ferme ? .8 : 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <b style={{ color: ferme ? C.bad : C.blueDk, fontSize: 14, textDecoration: ferme ? "line-through" : "none" }}>{h}</b>
+                        <span style={{ fontSize: 11, color: occ.length >= 3 ? C.bad : C.muted }}>{ferme ? "fermé" : `${occ.length}/3`}</span>
+                      </div>
+                      {occ.map((o, i) => (
+                        <div key={i} style={{ fontSize: 11, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.client}{o.appart ? ` (${o.appart})` : ""}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ---------- GESTION DES ACTIVITÉS (avec upload photo) ----------
 // date_jour : jour de programmation. UNE activité par jour côté client.
