@@ -128,10 +128,10 @@ export default function App() {
         </button>
       </header>
 
-      <nav style={{ display: "flex", background: C.card, borderBottom: `1px solid ${C.line}`, position: "sticky", top: 0, zIndex: 5 }}>
-        {[["edl", "État des lieux"], ["incident", "Un souci ?"], ["midstay", "Mi-séjour"], ["satis", "Satisfaction"], ["activites", "Offres"]].map(([k, l]) => (
+      <nav style={{ display: "flex", background: C.card, borderBottom: `1px solid ${C.line}`, position: "sticky", top: 0, zIndex: 5, overflowX: "auto" }}>
+        {[["edl", "État des lieux"], ["rdv", "RDV départ"], ["incident", "Un souci ?"], ["midstay", "Mi-séjour"], ["satis", "Satisfaction"], ["activites", "Offres"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
-            style={{ flex: 1, padding: "12px 4px", border: 0, background: "none", cursor: "pointer",
+            style={{ flex: "1 0 auto", padding: "12px 10px", border: 0, background: "none", cursor: "pointer", whiteSpace: "nowrap",
               fontWeight: tab === k ? 800 : 500, color: tab === k ? C.blue : C.muted,
               borderBottom: tab === k ? `3px solid ${C.blue}` : "3px solid transparent", fontSize: 13 }}>
             {l}
@@ -141,6 +141,7 @@ export default function App() {
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: 16 }}>
         {tab === "edl" && <EDL token={token} statusEdl={status?.edl} loading={chargement} onDone={(t) => markDone("edl", t)} />}
+        {tab === "rdv" && <RdvDepart token={token} />}
         {tab === "incident" && <Incident token={token} />}
         {tab === "midstay" && <MidStay token={token} dejaFait={status?.midstay} loading={chargement} onDone={() => markDone("midstay")} />}
         {tab === "satis" && <Satisfaction token={token} dejaFait={status?.satisfaction} loading={chargement} onDone={() => markDone("satisfaction")} />}
@@ -326,6 +327,104 @@ function Vitrine() {
     </div>
   );
 }
+
+// =====================================================================
+// MODULE : RDV ÉTAT DES LIEUX DE DÉPART
+// =====================================================================
+function RdvDepart({ token }) {
+  const [dispo, setDispo] = useState(null);   // { jours, mon_rdv }
+  const [jourSel, setJourSel] = useState(null); // date choisie
+  const [busy, setBusy] = useState(false);
+
+  const charger = () => post("get-rdv-dispo", { token }).then(setDispo);
+  useEffect(() => { charger(); /* eslint-disable-next-line */ }, []);
+
+  const reserver = async (date, heure) => {
+    setBusy(true);
+    const r = await post("book-rdv", { token, date, heure });
+    setBusy(false);
+    if (r.ok) { setJourSel(null); charger(); } else alert(r.error || "Erreur");
+  };
+  const annuler = async () => {
+    if (!confirm("Annuler votre rendez-vous de départ ?")) return;
+    setBusy(true);
+    const r = await post("cancel-rdv", { token });
+    setBusy(false);
+    if (r.ok) charger(); else alert(r.error || "Erreur");
+  };
+
+  const fDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  if (!dispo) return <Card>Chargement…</Card>;
+
+  // RDV déjà pris
+  if (dispo.mon_rdv) {
+    return (
+      <Card style={{ textAlign: "center", padding: "28px 20px" }}>
+        <div style={{ fontSize: 13, color: C.muted, textTransform: "uppercase", letterSpacing: ".5px" }}>Votre rendez-vous de départ</div>
+        <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 22, margin: "8px 0 2px" }}>{dispo.mon_rdv.heure}</div>
+        <div style={{ color: C.text, fontSize: 15, textTransform: "capitalize" }}>{fDate(dispo.mon_rdv.date)}</div>
+        <p style={{ color: C.muted, fontSize: 13, margin: "14px 0 18px" }}>Présentez-vous à la réception à l'heure choisie pour l'état des lieux de sortie.</p>
+        <button style={{ ...btn("#e8eff0"), color: C.bad, width: "auto", padding: "10px 18px" }} disabled={busy} onClick={annuler}>Annuler / changer</button>
+      </Card>
+    );
+  }
+
+  // Aucun jour ouvert
+  if (dispo.jours.length === 0) {
+    return <Card style={{ color: C.muted }}>Aucun créneau n'est ouvert pour le moment. Rapprochez-vous de la réception.</Card>;
+  }
+
+  // Choix du jour
+  if (!jourSel) {
+    return (
+      <>
+        <Card>
+          <h3 style={{ marginTop: 0, color: C.blueDk, fontFamily: FONT_TITLE, fontSize: 17, letterSpacing: "-.3px" }}>Réserver l'état des lieux de départ</h3>
+          <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Choisissez d'abord un jour, puis un horaire.</p>
+        </Card>
+        {dispo.jours.map((j) => {
+          const places = j.creneaux.reduce((s, c) => s + c.restant, 0);
+          return (
+            <Card key={j.date}>
+              <button onClick={() => setJourSel(j.date)} style={{ ...btn(), display: "flex", justifyContent: "space-between", alignItems: "center", textTransform: "capitalize" }}>
+                <span>{fDate(j.date)}</span>
+                <span style={{ fontSize: 13, opacity: .85 }}>{places} place{places > 1 ? "s" : ""} →</span>
+              </button>
+            </Card>
+          );
+        })}
+      </>
+    );
+  }
+
+  // Choix de l'horaire pour le jour sélectionné
+  const jour = dispo.jours.find((j) => j.date === jourSel);
+  return (
+    <>
+      <Card>
+        <button onClick={() => setJourSel(null)} style={{ ...btn("#eef5f6"), color: C.muted, width: "auto", padding: "8px 14px", fontSize: 13 }}>← Changer de jour</button>
+        <h3 style={{ color: C.blueDk, fontFamily: FONT_TITLE, fontSize: 17, letterSpacing: "-.3px", margin: "14px 0 2px", textTransform: "capitalize" }}>{fDate(jourSel)}</h3>
+        <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Sélectionnez un horaire disponible.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(92px,1fr))", gap: 8 }}>
+          {jour.creneaux.map((c) => {
+            const plein = c.restant <= 0;
+            return (
+              <button key={c.heure} disabled={plein || busy} onClick={() => reserver(jourSel, c.heure)}
+                style={{ padding: "12px 6px", borderRadius: 10, border: `1px solid ${plein ? C.line : C.blue}`,
+                  background: plein ? "#f3f6f7" : "#fff", color: plein ? C.muted : C.blue,
+                  cursor: plein ? "not-allowed" : "pointer", fontWeight: 700, fontSize: 15, minHeight: 52 }}>
+                {c.heure}
+                <div style={{ fontSize: 10, fontWeight: 500, color: plein ? C.bad : C.muted }}>{plein ? "complet" : `${c.restant} pl.`}</div>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 // =====================================================================
 // MODULE EDL — verrouillé par type (entrée / sortie) une fois enregistré
 // =====================================================================
