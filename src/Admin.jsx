@@ -978,9 +978,8 @@ function RdvAdmin() {
                         <span style={{ fontSize: 11, color: occ.length >= 3 ? C.bad : C.muted }}>{ferme ? "fermé" : `${occ.length}/3`}</span>
                       </div>
                       {occ.map((o, i) => (
-                        <div key={i} style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          <b style={{ color: C.blueDk }}>{o.appart || "—"}</b>
-                          {o.client ? <span style={{ color: C.muted }}> · {o.client}</span> : ""}
+                        <div key={i} style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <b style={{ color: C.blueDk }}>{(o.appart || "—").replace(/^Appartement\s+/i, "")}</b>
                         </div>
                       ))}
                     </div>
