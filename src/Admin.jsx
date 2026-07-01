@@ -858,17 +858,38 @@ function genSlots(debut, fin) {
 }
 function RdvAdmin() {
   const [data, setData] = useState(null);   // { jours, fermetures, reservations }
-  const [neo, setNeo] = useState({ date: "", heure_debut: "09:00", heure_fin: "12:00" });
+  const [neo, setNeo] = useState({ date_debut: "", date_fin: "", heure_debut: "09:00", heure_fin: "12:00" });
+  const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [drafts, setDrafts] = useState({}); // {jourId: {heure_debut, heure_fin}}
   const lbl = { fontSize: 13, fontWeight: 700, color: C.muted };
 
   const load = () => adminFn("admin-rdv-list").then(setData);
   useEffect(() => { load(); }, []);
 
+  // ISO local (évite le décalage de fuseau de toISOString)
+  const toISO = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+
   const ajouter = async () => {
-    if (!neo.date) { alert("Choisissez une date."); return; }
-    const r = await adminFn("admin-rdv-jour-save", neo);
-    if (r.ok) { setNeo({ date: "", heure_debut: "09:00", heure_fin: "12:00" }); load(); } else alert(r.error);
+    if (!neo.date_debut) { alert("Choisissez au moins la date de début."); return; }
+    const fin = neo.date_fin || neo.date_debut;
+    if (fin < neo.date_debut) { alert("La date de fin doit être après la date de début."); return; }
+    if (neo.heure_debut >= neo.heure_fin) { alert("L'heure de fin doit être après l'heure de début."); return; }
+    // Liste des jours de la période (bornes incluses)
+    const jours = [];
+    let d0 = new Date(neo.date_debut + "T00:00:00");
+    const d1 = new Date(fin + "T00:00:00");
+    while (d0 <= d1) { jours.push(toISO(d0)); d0.setDate(d0.getDate() + 1); }
+    if (jours.length > 60 && !confirm(`Ouvrir ${jours.length} jours ? Cela peut être long.`)) return;
+    setAjoutEnCours(true);
+    let erreurs = 0;
+    for (const date of jours) {
+      const r = await adminFn("admin-rdv-jour-save", { date, ouvert: true, heure_debut: neo.heure_debut, heure_fin: neo.heure_fin });
+      if (!r.ok) erreurs++;
+    }
+    setAjoutEnCours(false);
+    if (erreurs) alert(`${erreurs} jour(s) non enregistré(s).`);
+    setNeo({ date_debut: "", date_fin: "", heure_debut: "09:00", heure_fin: "12:00" });
+    load();
   };
   const majPlage = async (j) => {
     const d = drafts[j.id] || {};
@@ -901,16 +922,17 @@ function RdvAdmin() {
 
   return (
     <div>
-      {/* Ajouter un jour */}
+      {/* Ouvrir une période */}
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16, marginBottom: 18 }}>
-        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0, fontSize: 15 }}>Ouvrir un jour à la réservation</h3>
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0, fontSize: 15 }}>Ouvrir des jours à la réservation</h3>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-          <label style={lbl}>Date<input type="date" style={{ ...inp, width: 170 }} value={neo.date} onChange={(e) => setNeo({ ...neo, date: e.target.value })} /></label>
+          <label style={lbl}>Du<input type="date" style={{ ...inp, width: 160 }} value={neo.date_debut} onChange={(e) => setNeo({ ...neo, date_debut: e.target.value })} /></label>
+          <label style={lbl}>Au (optionnel)<input type="date" style={{ ...inp, width: 160 }} value={neo.date_fin} onChange={(e) => setNeo({ ...neo, date_fin: e.target.value })} /></label>
           <label style={lbl}>Début<input type="time" step="900" style={{ ...inp, width: 120 }} value={neo.heure_debut} onChange={(e) => setNeo({ ...neo, heure_debut: e.target.value })} /></label>
           <label style={lbl}>Fin<input type="time" step="900" style={{ ...inp, width: 120 }} value={neo.heure_fin} onChange={(e) => setNeo({ ...neo, heure_fin: e.target.value })} /></label>
-          <button style={{ ...btn(), width: "auto" }} onClick={ajouter}>Ouvrir ce jour</button>
+          <button style={{ ...btn(), width: "auto", opacity: ajoutEnCours ? .7 : 1 }} disabled={ajoutEnCours} onClick={ajouter}>{ajoutEnCours ? "Ouverture…" : "Ouvrir la période"}</button>
         </div>
-        <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0" }}>Les créneaux de 15 min se génèrent automatiquement entre le début et la fin (3 places chacun).</p>
+        <p style={{ fontSize: 12, color: C.muted, margin: "10px 0 0" }}>Laissez « Au » vide pour ouvrir un seul jour. Tous les jours de la période reçoivent la même plage horaire (créneaux de 15 min, 3 places chacun). Vous pourrez ensuite ajuster ou fermer chaque jour individuellement.</p>
       </div>
 
       {(data.jours || []).length === 0 && <p style={{ color: C.muted }}>Aucun jour ouvert. Ajoutez-en un ci-dessus.</p>}
@@ -956,7 +978,10 @@ function RdvAdmin() {
                         <span style={{ fontSize: 11, color: occ.length >= 3 ? C.bad : C.muted }}>{ferme ? "fermé" : `${occ.length}/3`}</span>
                       </div>
                       {occ.map((o, i) => (
-                        <div key={i} style={{ fontSize: 11, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.client}{o.appart ? ` (${o.appart})` : ""}</div>
+                        <div key={i} style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <b style={{ color: C.blueDk }}>{o.appart || "—"}</b>
+                          {o.client ? <span style={{ color: C.muted }}> · {o.client}</span> : ""}
+                        </div>
                       ))}
                     </div>
                   );
