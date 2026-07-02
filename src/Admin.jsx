@@ -825,6 +825,13 @@ function FicheSejour({ fiche, onClose }) {
             ))}
           </Section>
 
+          {/* RDV de départ */}
+          <Section titre="RDV état des lieux de départ">
+            {fiche.rdv
+              ? <div style={{ fontSize: 14 }}><b style={{ color: C.blueDk }}>{new Date(fiche.rdv.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</b> à <b>{fiche.rdv.heure}</b></div>
+              : <Vide />}
+          </Section>
+
           {/* Incidents */}
           <Section titre="Incidents">
             {fiche.incidents.length === 0 ? <Vide /> : fiche.incidents.map((inc, i) => (
@@ -861,10 +868,17 @@ function RdvAdmin() {
   const [neo, setNeo] = useState({ date_debut: "", date_fin: "", heure_debut: "09:00", heure_fin: "12:00" });
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [drafts, setDrafts] = useState({}); // {jourId: {heure_debut, heure_fin}}
+  const [sejours, setSejours] = useState([]);
+  const [slotSel, setSlotSel] = useState(null); // { date, heure }
+  const [qCli, setQCli] = useState("");
   const lbl = { fontSize: 13, fontWeight: 700, color: C.muted };
+  const numApp = (a) => (a || "—").replace(/^Appartement\s+/i, "");
 
   const load = () => adminFn("admin-rdv-list").then(setData);
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    adminFn("admin-sejours-list").then((r) => setSejours(r.sejours || []));
+  }, []);
 
   // ISO local (évite le décalage de fuseau de toISOString)
   const toISO = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
@@ -909,6 +923,38 @@ function RdvAdmin() {
     const r = await adminFn("admin-rdv-fermeture-toggle", { date, heure });
     if (r.ok) load(); else alert(r.error);
   };
+  const bookFor = async (sejour_id) => {
+    const r = await adminFn("admin-rdv-book", { sejour_id, date: slotSel.date, heure: slotSel.heure });
+    if (r.ok) { setQCli(""); load(); } else alert(r.error);
+  };
+  const unbook = async (id) => {
+    const r = await adminFn("admin-rdv-unbook", { id });
+    if (r.ok) load(); else alert(r.error);
+  };
+  const imprimerJour = (j, reservationsJour) => {
+    const fD = new Date(j.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const lignes = reservationsJour.length
+      ? reservationsJour.map((r) => `<tr><td>${r.heure}</td><td><b>${numApp(r.appart)}</b></td><td>${r.client || ""}</td><td></td></tr>`).join("")
+      : `<tr><td colspan="4" style="text-align:center;color:#888">Aucune réservation</td></tr>`;
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>EDL départ — ${fD}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#13343b;padding:24px}
+        h1{font-size:18px;margin:0 0 2px} .sub{color:#5d7a81;font-size:13px;margin:0 0 18px}
+        table{width:100%;border-collapse:collapse;font-size:14px}
+        th,td{text-align:left;padding:9px 10px;border-bottom:1px solid #dceaed}
+        th{font-size:12px;color:#5d7a81;text-transform:uppercase;letter-spacing:.3px}
+        td:nth-child(4){width:120px} @media print{button{display:none}}
+      </style></head><body>
+      <h1>États des lieux de départ</h1>
+      <p class="sub">${fD} — Les Cimes du Val d'Allos</p>
+      <table><thead><tr><th>Heure</th><th>Appartement</th><th>Client</th><th>Signature / visa</th></tr></thead>
+      <tbody>${lignes}</tbody></table>
+      <button onclick="window.print()" style="margin-top:20px;padding:10px 16px;border:0;border-radius:8px;background:#0f5b6b;color:#fff;font-weight:700;cursor:pointer">Imprimer</button>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) { alert("Autorisez les fenêtres pop-up pour imprimer."); return; }
+    w.document.write(html); w.document.close();
+  };
 
   if (!data) return <p style={{ color: C.muted }}>Chargement…</p>;
 
@@ -950,6 +996,7 @@ function RdvAdmin() {
                 <span style={{ fontSize: 13, color: C.muted }}>{nbResa} réservation{nbResa > 1 ? "s" : ""}</span>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ ...btn("#e8eff0"), color: C.blue, width: "auto", padding: "8px 12px", fontSize: 13 }} onClick={() => imprimerJour(j, (data.reservations || []).filter((r) => r.date === j.date).sort((a, b) => a.heure.localeCompare(b.heure)))}>🖨 Imprimer</button>
                 <button style={{ ...btn(j.ouvert ? "#e8eff0" : C.ok), color: j.ouvert ? C.muted : "#fff", width: "auto", padding: "8px 12px", fontSize: 13 }} onClick={() => toggleOuvert(j)}>{j.ouvert ? "Fermer le jour" : "Rouvrir"}</button>
                 <button style={{ ...btn("#e8eff0"), color: C.bad, width: "auto", padding: "8px 12px", fontSize: 13 }} onClick={() => supprJour(j)}>Suppr.</button>
               </div>
@@ -964,13 +1011,13 @@ function RdvAdmin() {
 
             {/* Créneaux générés */}
             <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Cliquez un créneau pour le fermer / rouvrir. Les noms indiquent les clients ayant réservé.</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Cliquez un créneau pour réserver pour un client, retirer une réservation ou le fermer.</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8 }}>
                 {slots.map((h) => {
                   const ferme = fermSet.has(`${j.date}|${h}`);
                   const occ = resaMap[`${j.date}|${h}`] || [];
                   return (
-                    <div key={h} onClick={() => toggleCreneau(j.date, h)}
+                    <div key={h} onClick={() => setSlotSel({ date: j.date, heure: h })}
                       style={{ cursor: "pointer", border: `1px solid ${ferme ? C.bad : C.line}`, borderRadius: 8, padding: "8px 10px",
                         background: ferme ? "#fcebeb" : "#fff", opacity: ferme ? .8 : 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -979,7 +1026,7 @@ function RdvAdmin() {
                       </div>
                       {occ.map((o, i) => (
                         <div key={i} style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          <b style={{ color: C.blueDk }}>{(o.appart || "—").replace(/^Appartement\s+/i, "")}</b>
+                          <b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>
                         </div>
                       ))}
                     </div>
@@ -990,10 +1037,78 @@ function RdvAdmin() {
           </div>
         );
       })}
+
+      {/* Modale de gestion d'un créneau */}
+      {slotSel && (() => {
+        const ferme = fermSet.has(`${slotSel.date}|${slotSel.heure}`);
+        const occ = resaMap[`${slotSel.date}|${slotSel.heure}`] || [];
+        const complet = occ.length >= 3;
+        const dejaIds = new Set(occ.map((o) => o.sejour_id).filter(Boolean));
+        const matches = (sejours || [])
+          .filter((s) => {
+            const t = `${s.nom_client || ""} ${s.email || ""} ${s.appart_nom || ""}`.toLowerCase();
+            return qCli.trim() ? t.includes(qCli.toLowerCase()) : true;
+          })
+          .slice(0, 8);
+        return (
+          <div onClick={() => { setSlotSel(null); setQCli(""); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <b style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 17 }}>Créneau {slotSel.heure}</b>
+                <button onClick={() => { setSlotSel(null); setQCli(""); }} style={{ ...btn("#e8eff0"), color: C.muted, width: "auto", padding: "6px 12px" }}>Fermer</button>
+              </div>
+              <div style={{ fontSize: 13, color: C.muted, textTransform: "capitalize", marginBottom: 14 }}>
+                {new Date(slotSel.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {occ.length}/3
+              </div>
+
+              {/* Réservations en place */}
+              {occ.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  {occ.map((o, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: C.bg, borderRadius: 8, marginBottom: 6 }}>
+                      <span><b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>{o.client ? <span style={{ color: C.muted }}> · {o.client}</span> : ""}</span>
+                      <button onClick={() => unbook(o.id)} style={{ ...btn("#e8eff0"), color: C.bad, width: "auto", padding: "5px 10px", fontSize: 12 }}>Retirer</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Réserver pour un client */}
+              {ferme ? (
+                <p style={{ color: C.bad, fontSize: 14 }}>Ce créneau est fermé. Rouvrez-le pour pouvoir réserver.</p>
+              ) : complet ? (
+                <p style={{ color: C.muted, fontSize: 14 }}>Créneau complet (3/3).</p>
+              ) : (
+                <div style={{ marginBottom: 14 }}>
+                  <span style={lbl}>Réserver pour un client</span>
+                  <input style={inp} placeholder="Rechercher (nom, email, appartement)…" value={qCli} onChange={(e) => setQCli(e.target.value)} />
+                  <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                    {matches.length === 0 && <span style={{ fontSize: 13, color: C.muted }}>Aucun séjour trouvé.</span>}
+                    {matches.map((s) => (
+                      <button key={s.id} disabled={dejaIds.has(s.id)} onClick={() => bookFor(s.id)}
+                        style={{ textAlign: "left", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.line}`, background: dejaIds.has(s.id) ? C.bg : "#fff", cursor: dejaIds.has(s.id) ? "default" : "pointer", fontSize: 13 }}>
+                        <b style={{ color: C.blueDk }}>{numApp(s.appart_nom)}</b> · {s.nom_client || s.email}
+                        {dejaIds.has(s.id) && <span style={{ color: C.ok, fontWeight: 700 }}> ✓ déjà sur ce créneau</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: C.muted, margin: "8px 0 0" }}>La réservation remonte automatiquement sur la fiche du séjour.</p>
+                </div>
+              )}
+
+              {/* Fermer / rouvrir le créneau */}
+              <button onClick={() => toggleCreneau(slotSel.date, slotSel.heure)}
+                style={{ ...btn(ferme ? C.ok : "#e8eff0"), color: ferme ? "#fff" : C.bad, width: "100%", marginTop: 4 }}>
+                {ferme ? "Rouvrir ce créneau" : "Fermer ce créneau"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
-
+// date_jour : jour de programmation. UNE activité par jour côté client.
 // ---------- GESTION DES ACTIVITÉS (avec upload photo) ----------
 // date_jour : jour de programmation. UNE activité par jour côté client.
 const VIDE_ACT = { titre: "", description: "", categorie: "", image_url: "", lien: "", actif: true, ordre: 0, date_jour: "" };
