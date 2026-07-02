@@ -415,25 +415,7 @@ function Dashboard({ onLogout }) {
           </>
         )}
 
-        {tab === "satis" && (
-          <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
-            {(data?.satisfaction || []).length === 0
-              ? <p style={{ color: C.muted, padding: 16 }}>Aucune réponse post-séjour.</p>
-              : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead><tr>{["Date", "Client", "Appart", "Accueil", "Propr.", "Équip.", "Literie", "Q/P", "NPS", "Apprécié", "À améliorer", "EDL"].map((h, i) =>
-                    <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
-                  <tbody>{(data?.satisfaction || []).map((s, i) => (
-                    <tr key={i}>
-                      {[fdate(s.created_at), s._client, s._appart, s.note_accueil, s.note_proprete, s.note_equipements, s.note_literie, s.note_qualite_prix, s.nps, s.point_positif || "—", s.point_amelioration || "—"].map((c, j) =>
-                        <td key={j} style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{c}</td>)}
-                      <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                        <button onClick={() => voirPhotos(s.sejour_id, s._client)} style={{ ...btn("#eef5f6"), color: C.blue, padding: "4px 10px", fontSize: 12 }}>📷</button>
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table>}
-          </div>
-        )}
+        {tab === "satis" && <SatisfactionAdmin reponses={data?.satisfaction || []} onPhotos={voirPhotos} />}
 
         {tab === "mid" && (
           <Table head={["Date", "Client", "Appart", "Logement", "Équip.", "Propreté", "Commentaire"]}
@@ -516,6 +498,117 @@ function Dashboard({ onLogout }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- ONGLET SATISFACTION (filtres + tri + cartes colorées) ----------
+const CRIT_SAT = [["note_accueil", "Accueil"], ["note_proprete", "Propreté"], ["note_equipements", "Équip."], ["note_literie", "Literie"], ["note_qualite_prix", "Q/P"]];
+const moyenneSat = (s) => {
+  const v = CRIT_SAT.map(([k]) => s[k]).filter((n) => n != null);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+};
+const noteBg = (n) => n == null ? { bg: C.bg, fg: C.muted } : n < 3 ? { bg: "#fcebeb", fg: "#a32d2d" } : n < 4 ? { bg: "#faeeda", fg: "#854f0b" } : { bg: "#eaf3de", fg: "#3b6d11" };
+const moyColor = (n) => n == null ? C.muted : n < 3 ? C.bad : n < 4 ? C.warn : C.ok;
+const npsBadge = (n) => n == null ? { bg: C.bg, fg: C.muted } : n >= 9 ? { bg: "#e1f5ee", fg: "#0f6e56" } : n >= 7 ? { bg: "#f1efe8", fg: "#5f5e5a" } : { bg: "#fcebeb", fg: "#a32d2d" };
+
+function SatisfactionAdmin({ reponses, onPhotos }) {
+  const [filtre, setFiltre] = useState("tous");   // tous | negatifs | commentaire
+  const [tri, setTri] = useState("date_desc");     // date_desc | note_asc | nps_asc
+
+  const enrich = (reponses || []).map((s) => ({ ...s, _moy: moyenneSat(s) }));
+
+  const filtres = enrich.filter((s) => {
+    if (filtre === "negatifs") return s._moy != null && s._moy < 3;
+    if (filtre === "commentaire") return (s.point_positif || "").trim() || (s.point_amelioration || "").trim();
+    return true;
+  });
+
+  const tries = [...filtres].sort((a, b) => {
+    if (tri === "note_asc") return (a._moy ?? 99) - (b._moy ?? 99);
+    if (tri === "nps_asc") return (a.nps ?? 99) - (b.nps ?? 99);
+    return new Date(b.created_at) - new Date(a.created_at); // date_desc
+  });
+
+  const numApp = (a) => (a || "—").replace(/^Appartement\s+/i, "");
+  const chip = (val, label) => (
+    <button onClick={() => setFiltre(val)} style={{
+      background: filtre === val ? C.blue : "#fff", color: filtre === val ? "#fff" : C.muted,
+      fontSize: 13, fontWeight: filtre === val ? 700 : 500, padding: "7px 14px", borderRadius: 999,
+      border: `1px solid ${filtre === val ? C.blue : C.line}`, cursor: "pointer",
+    }}>{label}</button>
+  );
+
+  if (enrich.length === 0) return <p style={{ color: C.muted }}>Aucune réponse post-séjour.</p>;
+
+  return (
+    <div>
+      {/* Filtres + tri */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {chip("tous", "Tous")}
+          {chip("negatifs", "Négatifs (moy < 3)")}
+          {chip("commentaire", "Avec commentaire")}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, color: C.muted }}>Trier par</span>
+          <select value={tri} onChange={(e) => setTri(e.target.value)} style={{ ...inp, width: "auto", marginTop: 0, padding: "7px 10px", fontSize: 13 }}>
+            <option value="date_desc">Date (récent)</option>
+            <option value="note_asc">Note la plus basse</option>
+            <option value="nps_asc">NPS le plus bas</option>
+          </select>
+        </div>
+      </div>
+
+      {tries.length === 0 && <p style={{ color: C.muted }}>Aucun avis pour ce filtre.</p>}
+
+      {/* Cartes */}
+      <div style={{ display: "grid", gap: 12 }}>
+        {tries.map((s, i) => {
+          const moy = s._moy;
+          const nb = npsBadge(s.nps);
+          const critique = moy != null && moy < 3;
+          return (
+            <div key={i} style={{ background: C.card, border: `1px solid ${critique ? C.bad : C.line}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 16, color: C.blueDk, fontWeight: 700 }}>
+                    {numApp(s._appart)} <span style={{ color: C.muted, fontWeight: 400 }}>· {s._client || "—"}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.muted }}>{fdate(s.created_at)}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 11, color: C.muted }}>Moyenne</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: moyColor(moy) }}>{moy == null ? "—" : moy.toFixed(1).replace(".", ",")}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 11, color: C.muted }}>NPS</div>
+                    <span style={{ background: nb.bg, color: nb.fg, fontWeight: 700, fontSize: 14, padding: "3px 10px", borderRadius: 8 }}>{s.nps ?? "—"}</span>
+                  </div>
+                  {onPhotos && <button onClick={() => onPhotos(s.sejour_id, s._client)} style={{ ...btn("#eef5f6"), color: C.blue, padding: "6px 10px", fontSize: 13 }} title="Photos EDL">📷</button>}
+                </div>
+              </div>
+
+              {/* Pastilles par critère */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+                {CRIT_SAT.map(([k, lab]) => {
+                  const col = noteBg(s[k]);
+                  return <span key={k} style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, background: col.bg, color: col.fg }}>{lab} {s[k] ?? "—"}</span>;
+                })}
+              </div>
+
+              {/* Verbatims */}
+              {(s.point_positif || s.point_amelioration) && (
+                <div style={{ marginTop: 12, fontSize: 13, color: C.text, lineHeight: 1.6 }}>
+                  {s.point_positif && <div><span style={{ color: C.ok, fontWeight: 700 }}>+</span> {s.point_positif}</div>}
+                  {s.point_amelioration && <div><span style={{ color: C.bad, fontWeight: 700 }}>–</span> {s.point_amelioration}</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
