@@ -383,7 +383,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}`, overflowX: "auto" }}>
-        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["rdv", "RDV départ"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"]].map(([key, l]) => (
+        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["rdv", "RDV départ"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"], ["reglages", "Réglages"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -474,6 +474,7 @@ function Dashboard({ onLogout }) {
         {tab === "promos" && <PromosAdmin />}
         {tab === "rdv" && <RdvAdmin />}
         {tab === "activites" && <ActivitesAdmin />}
+        {tab === "reglages" && <ReglagesAdmin />}
         {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
       </main>
 
@@ -1438,6 +1439,63 @@ function PromosAdmin() {
               </div>
             ))}
           </div>}
+    </div>
+  );
+}
+
+// ---------- RÉGLAGES : livret d'accueil & infos pratiques ----------
+function ReglagesAdmin() {
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [ok, setOk] = useState(false);
+  const lbl = { fontSize: 13, fontWeight: 700, color: C.muted, display: "block", marginBottom: 4 };
+
+  useEffect(() => { adminFn("admin-config-get").then((r) => setCfg(r.config || {})); }, []);
+  if (!cfg) return <p style={{ color: C.muted }}>Chargement…</p>;
+
+  const set = (k, v) => { setCfg({ ...cfg, [k]: v }); setOk(false); };
+  const save = async () => {
+    setSaving(true); setOk(false);
+    const r = await adminFn("admin-config-save", cfg);
+    setSaving(false);
+    if (r.ok) setOk(true); else alert(r.error || "Erreur");
+  };
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: 20 }}>
+        <h3 style={{ fontFamily: FONT_TITLE, color: C.blueDk, marginTop: 0 }}>Arrivée &amp; infos pratiques</h3>
+        <p style={{ color: C.muted, fontSize: 13, marginTop: 0 }}>Ces informations s'affichent sur la page d'accueil (avant identification), utiles pour les arrivées tardives ou autonomes. Laissez un champ vide pour le masquer.</p>
+
+        <label style={lbl}>Lien du livret d'accueil (Canva)</label>
+        <input style={inp} value={cfg.livret_url || ""} onChange={(e) => set("livret_url", e.target.value)} placeholder="https://www.canva.com/design/…/view" />
+        <p style={{ fontSize: 11, color: C.muted, margin: "4px 0 16px" }}>Dans Canva : Partager → « Toute personne disposant du lien » → Copier le lien.</p>
+
+        <label style={lbl}>Instructions d'arrivée autonome</label>
+        <textarea style={{ ...inp, minHeight: 80 }} value={cfg.arrivee_autonome || ""} onChange={(e) => set("arrivee_autonome", e.target.value)} placeholder="Ex. Votre numéro d'appartement vous a été communiqué par email. La clé se trouve dans la boîte à clés à code située…" />
+        <div style={{ height: 16 }} />
+
+        <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Nom du réseau Wifi</label>
+            <input style={inp} value={cfg.wifi_nom || ""} onChange={(e) => set("wifi_nom", e.target.value)} placeholder="Cimes-Residence" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Code Wifi</label>
+            <input style={inp} value={cfg.wifi_code || ""} onChange={(e) => set("wifi_code", e.target.value)} placeholder="MotDePasse123" />
+          </div>
+        </div>
+        <div style={{ height: 16 }} />
+
+        <label style={lbl}>Urgences &amp; contacts</label>
+        <textarea style={{ ...inp, minHeight: 70 }} value={cfg.urgences || ""} onChange={(e) => set("urgences", e.target.value)} placeholder="Réception : 04 92 83 65 59&#10;Urgences médicales : 15&#10;Astreinte résidence : 06 …" />
+
+        <div style={{ height: 20 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <button style={{ ...btn(), opacity: saving ? .7 : 1 }} disabled={saving} onClick={save}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+          {ok && <span style={{ color: C.ok, fontWeight: 700, fontSize: 14 }}>✓ Enregistré</span>}
+        </div>
+      </div>
     </div>
   );
 }
