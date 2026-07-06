@@ -248,6 +248,7 @@ function Identify({ onAuth }) {
             {loading ? "Création de votre espace…" : "Accéder à mon espace"}
           </button>
         </Card>
+        <InfosPratiques />
         <Vitrine />
         </div>
       </div>
@@ -291,6 +292,65 @@ const jourLocal = (d) => {
 
 // Vitrine : UNE activité par jour. On affiche celle du jour ;
 // à défaut, la prochaine animation programmée à venir.
+// Bloc "Arrivée & infos pratiques" sur la page d'accueil (avant identification).
+// Pensé pour les arrivées tardives/autonomes : livret, wifi, urgences.
+function InfosPratiques() {
+  const [cfg, setCfg] = useState(null);
+  useEffect(() => { post("get-config", {}).then((r) => setCfg(r.config || {})); }, []);
+  if (!cfg) return null;
+  const rien = !cfg.livret_url && !cfg.wifi_code && !cfg.urgences && !cfg.arrivee_autonome;
+  if (rien) return null;
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 2px" }}>Arrivée &amp; infos pratiques</h2>
+      <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>Tout ce qu'il faut pour bien démarrer</p>
+
+      {cfg.livret_url && (
+        <a href={cfg.livret_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+          <Card style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, borderColor: C.blue }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: "#e8f1f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: C.blueDk, fontSize: 15 }}>Livret d'accueil</div>
+              <div style={{ fontSize: 13, color: C.muted }}>Guide complet de votre séjour</div>
+            </div>
+            <span style={{ color: C.blue, fontSize: 20 }}>→</span>
+          </Card>
+        </a>
+      )}
+
+      {cfg.arrivee_autonome && (
+        <Card style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700, color: C.blueDk, fontSize: 15, marginBottom: 4 }}>Arrivée autonome</div>
+          <div style={{ fontSize: 14, color: C.text, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{cfg.arrivee_autonome}</div>
+        </Card>
+      )}
+
+      {(cfg.wifi_nom || cfg.wifi_code) && (
+        <Card style={{ padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: "#e8f1f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13a10 10 0 0 1 14 0" /><path d="M8.5 16.5a5 5 0 0 1 7 0" /><path d="M2 8.82a15 15 0 0 1 20 0" /><line x1="12" y1="20" x2="12" y2="20" /></svg>
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, color: C.blueDk, fontSize: 15 }}>Wifi</div>
+            {cfg.wifi_nom && <div style={{ fontSize: 14, color: C.text }}>Réseau : <b>{cfg.wifi_nom}</b></div>}
+            {cfg.wifi_code && <div style={{ fontSize: 14, color: C.text }}>Code : <b style={{ background: C.bg, padding: "1px 8px", borderRadius: 6, letterSpacing: 1 }}>{cfg.wifi_code}</b></div>}
+          </div>
+        </Card>
+      )}
+
+      {cfg.urgences && (
+        <Card style={{ padding: 16, borderColor: C.bad }}>
+          <div style={{ fontWeight: 700, color: C.bad, fontSize: 15, marginBottom: 4 }}>Urgences &amp; contacts</div>
+          <div style={{ fontSize: 14, color: C.text, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{cfg.urgences}</div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function Vitrine() {
   const [activite, setActivite] = useState(null);
   useEffect(() => {
