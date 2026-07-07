@@ -63,18 +63,35 @@ function tokenValide(t) {
   const exp = Number(parts[1]);
   return !!exp && Date.now() < exp;
 }
+// Token éventuellement transmis par un lien de relance : /?token=XXX
+function tokenDepuisURL() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get("token");
+    return tokenValide(t) ? t : null;
+  } catch { return null; }
+}
 
 export default function App() {
   useGlacierFonts();
+  // Un lien de relance (?token=…) pré-identifie le client et ouvre la satisfaction.
+  const [depuisRelance] = useState(() => !!tokenDepuisURL());
   const [token, setToken] = useState(() => {
     try {
+      const urlTok = tokenDepuisURL();
+      if (urlTok) {
+        try { localStorage.setItem(TOKEN_KEY, urlTok); } catch {}
+        // On nettoie l'URL pour ne pas laisser traîner le token dans la barre d'adresse
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch {}
+        return urlTok;
+      }
       const t = localStorage.getItem(TOKEN_KEY);
       if (tokenValide(t)) return t;
       localStorage.removeItem(TOKEN_KEY); // jeton périmé ou corrompu -> on nettoie
       return null;
     } catch { return null; }
   });
-  const [tab, setTab] = useState("edl");
+  const [tab, setTab] = useState(depuisRelance ? "satis" : "edl");
 
   // Statut serveur des modules déjà enregistrés pour ce séjour.
   // null = en cours de chargement (on affiche un loader, pas le formulaire)
