@@ -792,6 +792,14 @@ function SejoursAdmin({ apparts }) {
     if (r.ok) load(); else alert(r.error);
   };
 
+  const cloturer = async (s) => {
+    const qui = s.nom_client || s.email || "ce client";
+    if (!confirm(`Clôturer le séjour de « ${qui} » ?\n\nLa date de départ sera fixée à aujourd'hui. Le séjour passe « Terminé » et pourra être relancé pour l'enquête de satisfaction.`)) return;
+    const r = await adminFn("admin-sejour-cloturer", { sejour_id: s.id });
+    if (r.error) { alert(r.error); return; }
+    load();
+  };
+
   const del = async (s) => {
     const qui = s.nom_client || s.email || "ce client";
     if (!confirm(`Supprimer définitivement le séjour de « ${qui} » (arrivée ${fdate(s.date_arrivee)}) ?\n\nCela efface aussi son état des lieux, ses incidents et ses enquêtes. Action irréversible.`)) return;
@@ -828,6 +836,9 @@ function SejoursAdmin({ apparts }) {
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: st.color, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>{st.label}</span>
+                    {!s.date_depart && (
+                      <button onClick={() => cloturer(s)} style={{ ...btn(C.gold), padding: "4px 10px", fontSize: 12, marginTop: 6, display: "block" }}>Clôturer</button>
+                    )}
                   </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
