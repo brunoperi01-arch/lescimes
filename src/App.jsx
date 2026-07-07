@@ -140,7 +140,7 @@ export default function App() {
       </nav>
 
       <main style={{ maxWidth: 640, margin: "0 auto", padding: 16 }}>
-        {tab === "edl" && <EDL token={token} statusEdl={status?.edl} loading={chargement} onDone={(t) => markDone("edl", t)} />}
+        {tab === "edl" && <EDL token={token} statusEdl={status?.edl} loading={chargement} onDone={(t) => markDone("edl", t)} onGoSatis={() => setTab("satis")} />}
         {tab === "rdv" && <RdvDepart token={token} />}
         {tab === "incident" && <Incident token={token} />}
         {tab === "midstay" && <MidStay token={token} dejaFait={status?.midstay} loading={chargement} onDone={() => markDone("midstay")} />}
@@ -488,7 +488,7 @@ function RdvDepart({ token }) {
 // =====================================================================
 // MODULE EDL — verrouillé par type (entrée / sortie) une fois enregistré
 // =====================================================================
-function EDL({ token, statusEdl, loading, onDone }) {
+function EDL({ token, statusEdl, loading, onDone, onGoSatis }) {
   const [type, setType] = useState("entree");
   const [par, setPar] = useState("client");
   const [pieces, setPieces] = useState(PIECES_DEFAUT.map((p) => ({ piece: p, etat: null, commentaire: "" })));
@@ -517,9 +517,21 @@ function EDL({ token, statusEdl, loading, onDone }) {
 
   if (loading && !done) return <Chargement />;
 
+  // CTA satisfaction : affiché uniquement à la fin d'un EDL de SORTIE
+  const CtaSatis = () => type !== "sortie" ? null : (
+    <Card style={{ textAlign: "center", padding: "20px", borderColor: C.gold }}>
+      <div style={{ fontWeight: 700, color: C.blueDk, fontSize: 15 }}>Comment s'est passé votre séjour ?</div>
+      <p style={{ color: C.muted, fontSize: 14, margin: "6px 0 14px" }}>Votre avis compte : partagez-le en 1 minute avant de partir.</p>
+      <button style={{ ...btn(C.gold), width: "auto", padding: "12px 22px" }} onClick={() => onGoSatis?.()}>Donner mon avis →</button>
+    </Card>
+  );
+
   // Écran final (confirmation / photos)
   if (done && !PHOTOS_EDL) return (
-    <Merci message="Votre état des lieux est enregistré. Profitez bien de votre séjour à la montagne." />
+    <>
+      <Merci message="Votre état des lieux est enregistré. Profitez bien de votre séjour à la montagne." />
+      <CtaSatis />
+    </>
   );
   if (done) return (
     <>
@@ -528,6 +540,7 @@ function EDL({ token, statusEdl, loading, onDone }) {
         <Card key={i}><b>{p.piece}</b><PhotoUpload token={token} edlId={edlId} piece={p.piece} /></Card>
       ))}
       <Card><p style={{ color: C.muted, margin: 0, fontSize: 14 }}>Vos photos sont enregistrées au fur et à mesure.</p></Card>
+      <CtaSatis />
     </>
   );
 
