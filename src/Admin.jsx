@@ -696,7 +696,7 @@ const statutSejour = (s) => {
   const arr = jourSejour(s.date_arrivee);
   const dep = jourSejour(s.date_depart);
   if (arr != null && arr > auj) return { label: "À venir", color: C.blue };
-  if (dep != null && dep < auj) return { label: "Terminé", color: C.muted };
+  if (dep != null && dep <= auj) return { label: "Terminé", color: C.muted };
   return { label: "En cours", color: C.ok };
 };
 // Validation simple d'un email (repérage des saisies ratées)
@@ -1524,12 +1524,12 @@ function RelanceAdmin() {
   // Séjours terminés (départ passé) ET sans satisfaction ET avec email valide
   const aRelancer = list.filter((s) => {
     const dep = jourSejour(s.date_depart);
-    return dep != null && dep < auj && !s.satisfaction_faite && emailValide(s.email);
+    return dep != null && dep <= auj && !s.satisfaction_faite && emailValide(s.email);
   });
   // Séjours terminés sans satisfaction mais email invalide (ne peuvent pas être relancés par mail)
   const sansEmail = list.filter((s) => {
     const dep = jourSejour(s.date_depart);
-    return dep != null && dep < auj && !s.satisfaction_faite && !emailValide(s.email);
+    return dep != null && dep <= auj && !s.satisfaction_faite && !emailValide(s.email);
   });
 
   const mailto = (s) => {
