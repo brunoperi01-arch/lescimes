@@ -1532,26 +1532,33 @@ function RelanceAdmin() {
     return dep != null && dep <= auj && !s.satisfaction_faite && !emailValide(s.email);
   });
 
-  const mailto = (s) => {
+  const [enCours, setEnCours] = useState(null); // id du séjour en cours de génération
+
+  const relancer = async (s) => {
+    setEnCours(s.id);
+    const r = await adminFn("admin-relance-link", { sejour_id: s.id });
+    setEnCours(null);
+    // Lien auto-connecté si le token est généré, sinon lien simple (repli)
+    const lien = r.token ? `${APP_CLIENT_URL}/?token=${encodeURIComponent(r.token)}` : APP_CLIENT_URL;
     const sujet = "Votre avis sur votre séjour aux Cimes du Val d'Allos";
     const corps =
 `Bonjour${s.nom_client ? " " + s.nom_client : ""},
 
 Nous espérons que votre séjour aux Cimes du Val d'Allos s'est bien passé.
 
-Votre avis nous est précieux : il ne vous prendra qu'une minute et nous aide à améliorer la résidence. Vous pouvez y répondre ici :
-${APP_CLIENT_URL}
+Votre avis nous est précieux : il ne vous prendra qu'une minute et nous aide à améliorer la résidence. Cliquez simplement sur ce lien pour y répondre directement :
+${lien}
 
 Merci beaucoup, et au plaisir de vous accueillir à nouveau.
 
 L'équipe des Cimes du Val d'Allos`;
-    return `mailto:${encodeURIComponent(s.email)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+    window.location.href = `mailto:${encodeURIComponent(s.email)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
   };
 
   return (
     <div>
       <div style={{ background: "#e8f1f2", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: C.blueDk }}>
-        Séjours <b>terminés</b> dont l'enquête de satisfaction n'a pas été remplie. Cliquez « Relancer » : votre logiciel de messagerie s'ouvre avec un email pré-rempli, il ne reste qu'à envoyer.
+        Séjours <b>terminés</b> dont l'enquête de satisfaction n'a pas été remplie. Cliquez « Relancer » : un email pré-rempli s'ouvre, avec un lien qui identifie le client automatiquement et l'amène directement sur l'enquête.
       </div>
 
       {aRelancer.length === 0
@@ -1567,7 +1574,7 @@ L'équipe des Cimes du Val d'Allos`;
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.email}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    <a href={mailto(s)} style={{ ...btn(C.gold), padding: "6px 12px", fontSize: 13, textDecoration: "none", display: "inline-block" }}>Relancer</a>
+                    <button onClick={() => relancer(s)} disabled={enCours === s.id} style={{ ...btn(C.gold), padding: "6px 12px", fontSize: 13, opacity: enCours === s.id ? .6 : 1 }}>{enCours === s.id ? "Génération…" : "Relancer"}</button>
                   </td>
                 </tr>
               ))}</tbody>
