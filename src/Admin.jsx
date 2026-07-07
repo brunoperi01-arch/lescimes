@@ -383,7 +383,7 @@ function Dashboard({ onLogout }) {
 
       {/* Onglets */}
       <div style={{ display: "flex", gap: 4, padding: "0 20px", borderBottom: `1px solid ${C.line}`, overflowX: "auto" }}>
-        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["rdv", "RDV départ"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"], ["reglages", "Réglages"]].map(([key, l]) => (
+        {[["overview", "Vue d'ensemble"], ["kpi", "Indicateurs"], ["sejours", "Séjours"], ["rdv", "RDV départ"], ["relance", "À relancer"], ["satis", "Satisfaction"], ["mid", "Mi-séjour"], ["inc", "Incidents"], ["promos", "Promos"], ["activites", "Activités"], ["reglages", "Réglages"]].map(([key, l]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: "10px 16px", border: 0, background: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap",
             fontWeight: tab === key ? 800 : 500, color: tab === key ? C.blue : C.muted, borderBottom: tab === key ? `3px solid ${C.blue}` : "3px solid transparent" }}>
             {l}
@@ -475,6 +475,7 @@ function Dashboard({ onLogout }) {
         {tab === "rdv" && <RdvAdmin />}
         {tab === "activites" && <ActivitesAdmin />}
         {tab === "reglages" && <ReglagesAdmin />}
+        {tab === "relance" && <RelanceAdmin />}
         {tab === "sejours" && <SejoursAdmin apparts={apparts} />}
       </main>
 
@@ -1496,6 +1497,86 @@ function ReglagesAdmin() {
           {ok && <span style={{ color: C.ok, fontWeight: 700, fontSize: 14 }}>✓ Enregistré</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------- À RELANCER : séjours terminés sans satisfaction (mailto) ----------
+const APP_CLIENT_URL = "https://lescimes.vercel.app";
+function RelanceAdmin() {
+  const [list, setList] = useState(null);
+  useEffect(() => { adminFn("admin-sejours-list").then((r) => setList(r.sejours || [])); }, []);
+  if (!list) return <p style={{ color: C.muted }}>Chargement…</p>;
+
+  const numApp = (a) => (a || "—").replace(/^Appartement\s+/i, "");
+  const auj = jourSejour(new Date().toISOString());
+  // Séjours terminés (départ passé) ET sans satisfaction ET avec email valide
+  const aRelancer = list.filter((s) => {
+    const dep = jourSejour(s.date_depart);
+    return dep != null && dep < auj && !s.satisfaction_faite && emailValide(s.email);
+  });
+  // Séjours terminés sans satisfaction mais email invalide (ne peuvent pas être relancés par mail)
+  const sansEmail = list.filter((s) => {
+    const dep = jourSejour(s.date_depart);
+    return dep != null && dep < auj && !s.satisfaction_faite && !emailValide(s.email);
+  });
+
+  const mailto = (s) => {
+    const sujet = "Votre avis sur votre séjour aux Cimes du Val d'Allos";
+    const corps =
+`Bonjour${s.nom_client ? " " + s.nom_client : ""},
+
+Nous espérons que votre séjour aux Cimes du Val d'Allos s'est bien passé.
+
+Votre avis nous est précieux : il ne vous prendra qu'une minute et nous aide à améliorer la résidence. Vous pouvez y répondre ici :
+${APP_CLIENT_URL}
+
+Merci beaucoup, et au plaisir de vous accueillir à nouveau.
+
+L'équipe des Cimes du Val d'Allos`;
+    return `mailto:${encodeURIComponent(s.email)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#e8f1f2", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: C.blueDk }}>
+        Séjours <b>terminés</b> dont l'enquête de satisfaction n'a pas été remplie. Cliquez « Relancer » : votre logiciel de messagerie s'ouvre avec un email pré-rempli, il ne reste qu'à envoyer.
+      </div>
+
+      {aRelancer.length === 0
+        ? <p style={{ color: C.muted }}>Aucun séjour à relancer. 👍</p>
+        : <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr>{["Appart", "Client", "Email", "Départ", ""].map((h, i) =>
+                <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+              <tbody>{aRelancer.map((s) => (
+                <tr key={s.id}>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700, color: C.blueDk }}>{numApp(s.appart_nom)}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.nom_client || "—"}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.email}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+                    <a href={mailto(s)} style={{ ...btn(C.gold), padding: "6px 12px", fontSize: 13, textDecoration: "none", display: "inline-block" }}>Relancer</a>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+
+      {sansEmail.length > 0 && (
+        <details style={{ marginTop: 18 }}>
+          <summary style={{ cursor: "pointer", color: C.muted, fontSize: 14 }}>
+            {sansEmail.length} séjour{sansEmail.length > 1 ? "s" : ""} terminé{sansEmail.length > 1 ? "s" : ""} sans email valide (non relançable{sansEmail.length > 1 ? "s" : ""})
+          </summary>
+          <div style={{ marginTop: 10, fontSize: 13, color: C.muted }}>
+            {sansEmail.map((s) => (
+              <div key={s.id} style={{ padding: "6px 0", borderBottom: `1px solid ${C.bg}` }}>
+                <b style={{ color: C.blueDk }}>{numApp(s.appart_nom)}</b> · {s.nom_client || "—"} · {s.email || "email manquant"}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
