@@ -1516,6 +1516,7 @@ function ReglagesAdmin() {
 const APP_CLIENT_URL = "https://lescimes.vercel.app";
 function RelanceAdmin() {
   const [list, setList] = useState(null);
+  const [enCours, setEnCours] = useState(null); // id du séjour en cours de génération
   useEffect(() => { adminFn("admin-sejours-list").then((r) => setList(r.sejours || [])); }, []);
   if (!list) return <p style={{ color: C.muted }}>Chargement…</p>;
 
@@ -1531,8 +1532,6 @@ function RelanceAdmin() {
     const dep = jourSejour(s.date_depart);
     return dep != null && dep <= auj && !s.satisfaction_faite && !emailValide(s.email);
   });
-
-  const [enCours, setEnCours] = useState(null); // id du séjour en cours de génération
 
   const relancer = async (s) => {
     setEnCours(s.id);
