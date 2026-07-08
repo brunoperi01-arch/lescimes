@@ -71,20 +71,31 @@ function tokenDepuisURL() {
     return tokenValide(t) ? t : null;
   } catch { return null; }
 }
+// Code court de relance dans le chemin : /r/CODE
+function codeDepuisURL() {
+  try {
+    const m = window.location.pathname.match(/^\/r\/([a-z0-9]+)\/?$/i);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
 
 export default function App() {
   useGlacierFonts();
-  // Un lien de relance (?token=…) pré-identifie le client et ouvre la satisfaction.
-  const [depuisRelance] = useState(() => !!tokenDepuisURL());
+  // Un lien de relance (?token=… ou /r/CODE) pré-identifie le client et ouvre la satisfaction.
+  const [depuisRelance] = useState(() => !!tokenDepuisURL() || !!codeDepuisURL());
+  const [resolving, setResolving] = useState(() => !!codeDepuisURL()); // résolution async du code court
   const [token, setToken] = useState(() => {
     try {
       const urlTok = tokenDepuisURL();
       if (urlTok) {
         try { localStorage.setItem(TOKEN_KEY, urlTok); } catch {}
-        // On nettoie l'URL pour ne pas laisser traîner le token dans la barre d'adresse
-        try { window.history.replaceState({}, document.title, window.location.pathname); } catch {}
+        try { window.history.replaceState({}, document.title, "/"); } catch {}
         return urlTok;
       }
+      // Si un code court est présent, on ne lit PAS le localStorage tout de suite :
+      // on attend la résolution du code (effet ci-dessous) pour éviter d'ouvrir
+      // un ancien séjour au lieu de celui du lien.
+      if (codeDepuisURL()) return null;
       const t = localStorage.getItem(TOKEN_KEY);
       if (tokenValide(t)) return t;
       localStorage.removeItem(TOKEN_KEY); // jeton périmé ou corrompu -> on nettoie
@@ -92,6 +103,26 @@ export default function App() {
     } catch { return null; }
   });
   const [tab, setTab] = useState(depuisRelance ? "satis" : "edl");
+
+  // Résout le code court /r/CODE en token (appel serveur), puis pré-identifie.
+  useEffect(() => {
+    const code = codeDepuisURL();
+    if (!code) return;
+    let annule = false;
+    post("resolve-lien", { code }).then((r) => {
+      if (annule) return;
+      if (r.token) {
+        try { localStorage.setItem(TOKEN_KEY, r.token); } catch {}
+        setToken(r.token);
+      } else {
+        // Lien invalide/expiré : on retombe sur un éventuel séjour déjà connecté
+        try { const t = localStorage.getItem(TOKEN_KEY); if (tokenValide(t)) setToken(t); } catch {}
+      }
+      try { window.history.replaceState({}, document.title, "/"); } catch {}
+      setResolving(false);
+    });
+    return () => { annule = true; };
+  }, []);
 
   // Statut serveur des modules déjà enregistrés pour ce séjour.
   // null = en cours de chargement (on affiche un loader, pas le formulaire)
@@ -128,6 +159,11 @@ export default function App() {
     setToken(null);
   };
 
+  if (resolving) return (
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT_BODY, color: C.muted }}>
+      Connexion à votre espace…
+    </div>
+  );
   if (!token) return <Identify onAuth={handleAuth} />;
 
   const chargement = status === null;
