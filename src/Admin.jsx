@@ -1537,8 +1537,8 @@ function RelanceAdmin() {
     setEnCours(s.id);
     const r = await adminFn("admin-relance-link", { sejour_id: s.id });
     setEnCours(null);
-    // Lien auto-connecté si le token est généré, sinon lien simple (repli)
-    const lien = r.token ? `${APP_CLIENT_URL}/?token=${encodeURIComponent(r.token)}` : APP_CLIENT_URL;
+    // Lien court auto-connecté si le code est généré, sinon lien simple (repli)
+    const lien = r.code ? `${APP_CLIENT_URL}/r/${r.code}` : APP_CLIENT_URL;
     const sujet = "Votre avis sur votre séjour aux Cimes du Val d'Allos";
     const corps =
 `Bonjour${s.nom_client ? " " + s.nom_client : ""},
