@@ -836,6 +836,7 @@ function Overview({ onOpenAppart }) {
 function SejoursAdmin({ apparts }) {
   const [list, setList] = useState(null);
   const [q, setQ] = useState("");
+  const [tri, setTri] = useState("arrivee_desc");
   const [fiche, setFiche] = useState(null); // détail du séjour ouvert
   const load = () => adminFn("admin-sejours-list").then((r) => setList(r.sejours || []));
   useEffect(() => { load(); }, []);
@@ -873,16 +874,44 @@ function SejoursAdmin({ apparts }) {
        || (s.email || "").toLowerCase().includes(q.toLowerCase())
        || (s.appart_nom || "").toLowerCase().includes(q.toLowerCase()));
 
+  const tries = [...filtered].sort((a, b) => {
+    const arA = a.date_arrivee ? new Date(a.date_arrivee).getTime() : 0;
+    const arB = b.date_arrivee ? new Date(b.date_arrivee).getTime() : 0;
+    const depA = a.date_depart ? new Date(a.date_depart).getTime() : 0;
+    const depB = b.date_depart ? new Date(b.date_depart).getTime() : 0;
+    if (tri === "arrivee_asc") return arA - arB;
+    if (tri === "arrivee_desc") return arB - arA;
+    if (tri === "depart_asc") return (depA || Infinity) - (depB || Infinity);
+    if (tri === "depart_desc") return depB - depA;
+    if (tri === "client_az") return (a.nom_client || "").localeCompare(b.nom_client || "");
+    if (tri === "appart") return (a.appart_nom || "").localeCompare(b.appart_nom || "");
+    return arB - arA;
+  });
+
   if (!list) return <p style={{ color: C.muted }}>Chargement…</p>;
   return (
     <div>
-      <input style={{ ...inp, maxWidth: 360, marginBottom: 16 }} placeholder="Rechercher (nom, email, appartement)…" value={q} onChange={(e) => setQ(e.target.value)} />
-      {filtered.length === 0 ? <p style={{ color: C.muted }}>Aucun séjour.</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+        <input style={{ ...inp, maxWidth: 360, marginTop: 0 }} placeholder="Rechercher (nom, email, appartement)…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, color: C.muted }}>Trier par</span>
+          <select value={tri} onChange={(e) => setTri(e.target.value)} style={{ ...inp, width: "auto", marginTop: 0, padding: "7px 10px", fontSize: 13 }}>
+            <option value="arrivee_desc">Arrivée (récent)</option>
+            <option value="arrivee_asc">Arrivée (ancien)</option>
+            <option value="depart_asc">Départ (le plus proche)</option>
+            <option value="depart_desc">Départ (le plus lointain)</option>
+            <option value="client_az">Client (A-Z)</option>
+            <option value="appart">Appartement</option>
+          </select>
+        </div>
+      </div>
+
+      {tries.length === 0 ? <p style={{ color: C.muted }}>Aucun séjour.</p>
         : <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Statut", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
                 <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
-              <tbody>{filtered.map((s) => {
+              <tbody>{tries.map((s) => {
                 const st = statutSejour(s);
                 return (
                 <tr key={s.id}>
@@ -924,7 +953,6 @@ function SejoursAdmin({ apparts }) {
     </div>
   );
 }
-
 // ---------- FICHE DÉTAILLÉE D'UN SÉJOUR ----------
 function FicheSejour({ fiche, onClose }) {
   const note = (n) => n == null ? "—" : `${n}/5`;
