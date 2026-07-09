@@ -408,19 +408,9 @@ function Vitrine() {
   const [activite, setActivite] = useState(null);
   useEffect(() => {
     post("get-activites", {}).then((r) => {
-      const t = (d) => { const x = jourLocal(d); return x ? x.getTime() : null; };
-      const auj = t(new Date());
-      const toutes = r.activites || [];
-
-      // Priorité : une activité avec une date_jour fixée sur aujourd'hui l'emporte
-      // (utile pour un événement ponctuel, ex. fête locale, marché de Noël…)
-      const fixeeAujourdhui = toutes.find((a) => a.date_jour && t(a.date_jour) === auj);
-      if (fixeeAujourdhui) { setActivite(fixeeAujourdhui); return; }
-
-      // Sinon : tirage aléatoire parmi les activités SANS date fixée, à chaque visite
-      const rotables = toutes.filter((a) => !a.date_jour);
-      if (rotables.length === 0) { setActivite(null); return; }
-      setActivite(rotables[Math.floor(Math.random() * rotables.length)]);
+      const actives = (r.activites || []).filter((a) => a.actif !== false);
+      if (actives.length === 0) { setActivite(null); return; }
+      setActivite(actives[Math.floor(Math.random() * actives.length)]);
     });
   }, []);
   if (!activite) return null;
