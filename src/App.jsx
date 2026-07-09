@@ -410,14 +410,17 @@ function Vitrine() {
     post("get-activites", {}).then((r) => {
       const t = (d) => { const x = jourLocal(d); return x ? x.getTime() : null; };
       const auj = t(new Date());
-      const prog = (r.activites || []).filter((a) => a.date_jour);
-      // activité du jour ; à défaut, la prochaine programmée à venir
-      let choisie = prog.find((a) => t(a.date_jour) === auj);
-      if (!choisie) {
-        const futures = prog.filter((a) => t(a.date_jour) > auj).sort((a, b) => t(a.date_jour) - t(b.date_jour));
-        choisie = futures[0] || null;
-      }
-      setActivite(choisie);
+      const toutes = r.activites || [];
+
+      // Priorité : une activité avec une date_jour fixée sur aujourd'hui l'emporte
+      // (utile pour un événement ponctuel, ex. fête locale, marché de Noël…)
+      const fixeeAujourdhui = toutes.find((a) => a.date_jour && t(a.date_jour) === auj);
+      if (fixeeAujourdhui) { setActivite(fixeeAujourdhui); return; }
+
+      // Sinon : tirage aléatoire parmi les activités SANS date fixée, à chaque visite
+      const rotables = toutes.filter((a) => !a.date_jour);
+      if (rotables.length === 0) { setActivite(null); return; }
+      setActivite(rotables[Math.floor(Math.random() * rotables.length)]);
     });
   }, []);
   if (!activite) return null;
@@ -440,7 +443,6 @@ function Vitrine() {
     </div>
   );
 }
-
 // =====================================================================
 // MODULE : RDV ÉTAT DES LIEUX DE DÉPART
 // =====================================================================
