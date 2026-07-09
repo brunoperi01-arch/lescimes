@@ -515,24 +515,64 @@ const moyColor = (n) => n == null ? C.muted : n < 3 ? C.bad : n < 4 ? C.warn : C
 const npsBadge = (n) => n == null ? { bg: C.bg, fg: C.muted } : n >= 9 ? { bg: "#e1f5ee", fg: "#0f6e56" } : n >= 7 ? { bg: "#f1efe8", fg: "#5f5e5a" } : { bg: "#fcebeb", fg: "#a32d2d" };
 
 function SatisfactionAdmin({ reponses, onPhotos }) {
-  const [filtre, setFiltre] = useState("tous");   // tous | negatifs | commentaire
-  const [tri, setTri] = useState("date_desc");     // date_desc | note_asc | nps_asc
+  const [filtre, setFiltre] = useState("tous");        // tous | negatifs | commentaire
+  const [critFaible, setCritFaible] = useState("");     // "" | note_accueil | note_proprete | ...
+  const [recherche, setRecherche] = useState("");
+  const [tri, setTri] = useState("date_desc");
+  const [copieId, setCopieId] = useState(null);
 
-  const enrich = (reponses || []).map((s) => ({ ...s, _moy: moyenneSat(s) }));
+  const enrich = (reponses || []).map((s, i) => ({ ...s, _moy: moyenneSat(s), _idx: i }));
 
   const filtres = enrich.filter((s) => {
-    if (filtre === "negatifs") return s._moy != null && s._moy < 3;
-    if (filtre === "commentaire") return (s.point_positif || "").trim() || (s.point_amelioration || "").trim();
+    if (filtre === "negatifs" && !(s._moy != null && s._moy < 3)) return false;
+    if (filtre === "commentaire" && !((s.point_positif || "").trim() || (s.point_amelioration || "").trim())) return false;
+    if (critFaible && !(s[critFaible] != null && s[critFaible] < 3)) return false;
+    if (recherche.trim()) {
+      const q = recherche.trim().toLowerCase();
+      const hay = `${s._client || ""} ${s.point_positif || ""} ${s.point_amelioration || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
   const tries = [...filtres].sort((a, b) => {
     if (tri === "note_asc") return (a._moy ?? 99) - (b._moy ?? 99);
+    if (tri === "note_desc") return (b._moy ?? -1) - (a._moy ?? -1);
     if (tri === "nps_asc") return (a.nps ?? 99) - (b.nps ?? 99);
+    if (tri === "nps_desc") return (b.nps ?? -1) - (a.nps ?? -1);
+    if (tri === "date_asc") return new Date(a.created_at) - new Date(b.created_at);
     return new Date(b.created_at) - new Date(a.created_at); // date_desc
   });
 
   const numApp = (a) => (a || "—").replace(/^Appartement\s+/i, "");
+
+  const copier = async (s) => {
+    const texte = `« ${(s.point_positif || s.point_amelioration || "").trim()} »\n— ${s._client || "Un client"}, Les Cimes du Val d'Allos${s._moy != null ? ` (${s._moy.toFixed(1).replace(".", ",")}/5)` : ""}`;
+    try {
+      await navigator.clipboard.writeText(texte);
+      setCopieId(s._idx);
+      setTimeout(() => setCopieId(null), 1500);
+    } catch { alert("Copie impossible sur ce navigateur."); }
+  };
+
+  const exporterCSV = () => {
+    const head = ["Appartement", "Client", "Date", "Accueil", "Propreté", "Équip.", "Literie", "Q/P", "Moyenne", "NPS", "Point positif", "Point d'amélioration", "Publication autorisée"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lignes = tries.map((s) => [
+      numApp(s._appart), s._client || "", fdate(s.created_at),
+      s.note_accueil ?? "", s.note_proprete ?? "", s.note_equipements ?? "", s.note_literie ?? "", s.note_qualite_prix ?? "",
+      s._moy != null ? s._moy.toFixed(1) : "", s.nps ?? "",
+      s.point_positif || "", s.point_amelioration || "", s.consentement_publication ? "Oui" : "Non",
+    ].map(esc).join(";"));
+    const csv = "\uFEFF" + [head.map(esc).join(";"), ...lignes].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `satisfaction_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const chip = (val, label) => (
     <button onClick={() => setFiltre(val)} style={{
       background: filtre === val ? C.blue : "#fff", color: filtre === val ? "#fff" : C.muted,
@@ -545,8 +585,8 @@ function SatisfactionAdmin({ reponses, onPhotos }) {
 
   return (
     <div>
-      {/* Filtres + tri */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
+      {/* Filtres rapides + tri */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {chip("tous", "Tous")}
           {chip("negatifs", "Négatifs (moy < 3)")}
@@ -556,26 +596,41 @@ function SatisfactionAdmin({ reponses, onPhotos }) {
           <span style={{ fontSize: 13, color: C.muted }}>Trier par</span>
           <select value={tri} onChange={(e) => setTri(e.target.value)} style={{ ...inp, width: "auto", marginTop: 0, padding: "7px 10px", fontSize: 13 }}>
             <option value="date_desc">Date (récent)</option>
+            <option value="date_asc">Date (ancien)</option>
             <option value="note_asc">Note la plus basse</option>
+            <option value="note_desc">Note la plus haute</option>
             <option value="nps_asc">NPS le plus bas</option>
+            <option value="nps_desc">NPS le plus haut</option>
           </select>
         </div>
+      </div>
+
+      {/* Filtre par catégorie faible + recherche + export */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+        <select value={critFaible} onChange={(e) => setCritFaible(e.target.value)} style={{ ...inp, width: "auto", marginTop: 0, padding: "7px 10px", fontSize: 13 }}>
+          <option value="">Toutes les catégories</option>
+          {CRIT_SAT.map(([k, l]) => <option key={k} value={k}>{l} faible (&lt; 3)</option>)}
+        </select>
+        <input style={{ ...inp, width: 240, marginTop: 0, padding: "8px 12px", fontSize: 13 }} placeholder="Rechercher (client, commentaire)…" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+        <button onClick={exporterCSV} style={{ ...btn("#e8eff0"), color: C.blue, width: "auto", padding: "8px 14px", fontSize: 13 }}>⬇ Export CSV ({tries.length})</button>
       </div>
 
       {tries.length === 0 && <p style={{ color: C.muted }}>Aucun avis pour ce filtre.</p>}
 
       {/* Cartes */}
       <div style={{ display: "grid", gap: 12 }}>
-        {tries.map((s, i) => {
+        {tries.map((s) => {
           const moy = s._moy;
           const nb = npsBadge(s.nps);
           const critique = moy != null && moy < 3;
+          const publiable = !!s.consentement_publication && ((s.point_positif || "").trim() || (s.point_amelioration || "").trim());
           return (
-            <div key={i} style={{ background: C.card, border: `1px solid ${critique ? C.bad : C.line}`, borderRadius: 12, padding: 16 }}>
+            <div key={s._idx} style={{ background: C.card, border: `1px solid ${critique ? C.bad : C.line}`, borderRadius: 12, padding: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontSize: 16, color: C.blueDk, fontWeight: 700 }}>
                     {numApp(s._appart)} <span style={{ color: C.muted, fontWeight: 400 }}>· {s._client || "—"}</span>
+                    {s.consentement_publication && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "#3b6d11", background: "#eaf3de", borderRadius: 6, padding: "2px 7px" }}>Publication autorisée</span>}
                   </div>
                   <div style={{ fontSize: 12, color: C.muted }}>{fdate(s.created_at)}</div>
                 </div>
@@ -588,6 +643,11 @@ function SatisfactionAdmin({ reponses, onPhotos }) {
                     <div style={{ fontSize: 11, color: C.muted }}>NPS</div>
                     <span style={{ background: nb.bg, color: nb.fg, fontWeight: 700, fontSize: 14, padding: "3px 10px", borderRadius: 8 }}>{s.nps ?? "—"}</span>
                   </div>
+                  {publiable && (
+                    <button onClick={() => copier(s)} style={{ ...btn(copieId === s._idx ? C.ok : "#eef5f6"), color: copieId === s._idx ? "#fff" : C.blue, padding: "6px 10px", fontSize: 13 }} title="Copier pour publication">
+                      {copieId === s._idx ? "✓ Copié" : "📋 Copier"}
+                    </button>
+                  )}
                   {onPhotos && <button onClick={() => onPhotos(s.sejour_id, s._client)} style={{ ...btn("#eef5f6"), color: C.blue, padding: "6px 10px", fontSize: 13 }} title="Photos EDL">📷</button>}
                 </div>
               </div>
@@ -596,7 +656,7 @@ function SatisfactionAdmin({ reponses, onPhotos }) {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
                 {CRIT_SAT.map(([k, lab]) => {
                   const col = noteBg(s[k]);
-                  return <span key={k} style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, background: col.bg, color: col.fg }}>{lab} {s[k] ?? "—"}</span>;
+                  return <span key={k} style={{ fontSize: 12, padding: "3px 9px", borderRadius: 6, background: col.bg, color: col.fg, boxShadow: k === critFaible ? `0 0 0 1px ${C.blue}` : "none" }}>{lab} {s[k] ?? "—"}</span>;
                 })}
               </div>
 
