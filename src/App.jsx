@@ -884,12 +884,14 @@ function Satisfaction({ token, dejaFait, loading, onDone }) {
   const [nps, setNps] = useState(null);
   const [pos, setPos] = useState("");
   const [amel, setAmel] = useState("");
+  const [consentPub, setConsentPub] = useState(false);
   const [sent, setSent] = useState(false);
 
   const submit = async () => {
     if (dejaFait) return;
     const r = await post("submit-satisfaction", {
       token, ...notes, nps, point_positif: pos, point_amelioration: amel,
+      consentement_publication: consentPub,
     });
     if (r.ok || r.dejaFait) { setSent(true); onDone?.(); } else alert(r.error);
   };
@@ -926,6 +928,11 @@ function Satisfaction({ token, dejaFait, loading, onDone }) {
       <label style={label}>Ce que vous avez le plus apprécié<textarea style={{ ...inp, minHeight: 60 }} value={pos} onChange={(e) => setPos(e.target.value)} /></label>
       <div style={{ height: 12 }} />
       <label style={label}>Ce qu'on pourrait améliorer<textarea style={{ ...inp, minHeight: 60 }} value={amel} onChange={(e) => setAmel(e.target.value)} /></label>
+      <div style={{ height: 14 }} />
+      <label style={{ display: "flex", gap: 8, fontSize: 13, color: C.text, alignItems: "flex-start" }}>
+        <input type="checkbox" checked={consentPub} onChange={(e) => setConsentPub(e.target.checked)} style={{ marginTop: 2, width: 22, height: 22, flexShrink: 0 }} />
+        <span>J'autorise Les Cimes du Val d'Allos à publier mon avis (site internet, réseaux sociaux), avec mon prénom uniquement.</span>
+      </label>
       <div style={{ height: 14 }} />
       <button style={btn()} disabled={Object.keys(notes).length < CRIT.length || nps === null} onClick={submit}>Envoyer mon avis</button>
     </Card>
