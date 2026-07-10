@@ -404,7 +404,7 @@ function InfosPratiques() {
   );
 }
 
-function Vitrine() {
+function Vitrine({ onVoirToutes }) {
   const [activite, setActivite] = useState(null);
   useEffect(() => {
     post("get-activites", {}).then((r) => {
@@ -417,10 +417,17 @@ function Vitrine() {
   const a = activite;
   return (
     <div style={{ marginTop: 24 }}>
-      <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 2px" }}>
-        Idées sorties
-      </h2>
-      <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>À voir, à vivre, à faire</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <h2 style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 18, letterSpacing: "-.3px", margin: "0 0 2px" }}>Idées sorties</h2>
+          <p style={{ color: C.gold, fontSize: 13, fontWeight: 700, margin: "0 0 10px" }}>À voir, à vivre, à faire</p>
+        </div>
+        {onVoirToutes && (
+          <button onClick={onVoirToutes} style={{ background: "none", border: 0, color: C.blue, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 10 }}>
+            Voir toutes les activités →
+          </button>
+        )}
+      </div>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
         <div style={{ padding: 16 }}>
@@ -430,6 +437,41 @@ function Vitrine() {
           {a.lien && <a href={a.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14 }}>En savoir plus →</a>}
         </div>
       </Card>
+    </div>
+  );
+}
+
+// Liste complète des activités (accessible via "Voir toutes les activités →")
+function ActivitesListe({ onBack }) {
+  const [liste, setListe] = useState(null);
+  useEffect(() => {
+    post("get-activites", {}).then((r) => setListe((r.activites || []).filter((a) => a.actif !== false)));
+  }, []);
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: FONT_BODY }}>
+      <header style={{ background: C.blueDk, color: "#fff", padding: "18px 16px" }}>
+        <button onClick={onBack} style={{ background: "none", border: "1px solid rgba(255,255,255,.4)", color: "#fff", borderRadius: 8, padding: "7px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", marginBottom: 10 }}>
+          ← Retour
+        </button>
+        <div style={{ fontFamily: FONT_TITLE, fontSize: 18, letterSpacing: "-.3px" }}>Toutes les activités</div>
+        <div style={{ opacity: .85, fontSize: 13 }}>Les Cimes du Val d'Allos</div>
+      </header>
+      <main style={{ maxWidth: 640, margin: "0 auto", padding: 16 }}>
+        {liste === null ? <Card>Chargement…</Card>
+          : liste.length === 0 ? <Card style={{ color: C.muted }}>Aucune activité disponible pour le moment.</Card>
+          : liste.map((a, i) => (
+              <Card key={i} style={{ padding: 0, overflow: "hidden" }}>
+                {a.image_url && <img src={a.image_url} alt={a.titre} style={{ width: "100%", height: 160, objectFit: "cover" }} />}
+                <div style={{ padding: 16 }}>
+                  {a.categorie && <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }}>{a.categorie}</span>}
+                  <div style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 16, letterSpacing: "-.3px", margin: "4px 0" }}>{a.titre}</div>
+                  <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>{a.description}</p>
+                  {a.lien && <a href={a.lien} target="_blank" rel="noreferrer" style={{ color: C.gold, fontWeight: 700, fontSize: 14 }}>En savoir plus →</a>}
+                </div>
+              </Card>
+            ))}
+      </main>
     </div>
   );
 }
