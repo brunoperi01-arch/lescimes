@@ -243,8 +243,8 @@ function Identify({ onAuth }) {
   const [mkt, setMkt] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [vue, setVue] = useState("accueil"); // "accueil" | "activites"
 
-  // Charge la liste des appartements pour le menu déroulant
   useEffect(() => {
     post("list-apparts-public", {}).then((r) => setApparts(r.appartements || []));
   }, []);
@@ -264,6 +264,10 @@ function Identify({ onAuth }) {
     setLoading(false);
     if (r.token) onAuth(r.token); else setErr(r.error || "Erreur inconnue.");
   };
+
+  if (vue === "activites") {
+    return <ActivitesListe onBack={() => setVue("accueil")} />;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "0 0 32px", fontFamily: FONT_BODY }}>
@@ -302,13 +306,12 @@ function Identify({ onAuth }) {
           </button>
         </Card>
         <InfosPratiques />
-        <Vitrine />
+        <Vitrine onVoirToutes={() => setVue("activites")} />
         </div>
       </div>
     </div>
   );
 }
-
 // En-tête héros : bandeau teal avec icône cime (SVG inline, pas de dépendance)
 function Hero({ titre, sousTitre }) {
   return (
