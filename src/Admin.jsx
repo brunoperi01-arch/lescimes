@@ -1058,13 +1058,14 @@ function genSlots(debut, fin) {
   return out;
 }
 function RdvAdmin() {
-  const [data, setData] = useState(null);   // { jours, fermetures, reservations }
+  const [data, setData] = useState(null);
   const [neo, setNeo] = useState({ date_debut: "", date_fin: "", heure_debut: "09:00", heure_fin: "12:00" });
   const [ajoutEnCours, setAjoutEnCours] = useState(false);
-  const [drafts, setDrafts] = useState({}); // {jourId: {heure_debut, heure_fin}}
+  const [drafts, setDrafts] = useState({});
   const [sejours, setSejours] = useState([]);
-  const [slotSel, setSlotSel] = useState(null); // { date, heure }
+  const [slotSel, setSlotSel] = useState(null);
   const [qCli, setQCli] = useState("");
+  const [apManuel, setApManuel] = useState("");
   const lbl = { fontSize: 13, fontWeight: 700, color: C.muted };
   const numApp = (a) => (a || "—").replace(/^Appartement\s+/i, "");
 
@@ -1119,6 +1120,11 @@ function RdvAdmin() {
     const r = await adminFn("admin-rdv-book", { sejour_id, date: slotSel.date, heure: slotSel.heure });
     if (r.ok) { setQCli(""); load(); } else alert(r.error);
   };
+  const bookManuel = async () => {
+    if (!apManuel.trim()) return;
+    const r = await adminFn("admin-rdv-book", { appartement_manuel: apManuel.trim(), date: slotSel.date, heure: slotSel.heure });
+    if (r.ok) { setApManuel(""); load(); } else alert(r.error);
+  };
   const unbook = async (id) => {
     const r = await adminFn("admin-rdv-unbook", { id });
     if (r.ok) load(); else alert(r.error);
@@ -1158,7 +1164,6 @@ function RdvAdmin() {
   }
   const fDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-  // Sépare les jours ouverts (actifs) des jours fermés (archives)
   const joursActifs = (data.jours || []).filter((j) => j.ouvert);
   const joursArchives = (data.jours || []).filter((j) => !j.ouvert);
 
@@ -1203,7 +1208,7 @@ function RdvAdmin() {
                   </div>
                   {occ.map((o, i) => (
                     <div key={i} style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      <b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>
+                      <b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>{o.manuel && <span style={{ color: C.gold }}> ✎</span>}
                     </div>
                   ))}
                 </div>
@@ -1258,11 +1263,11 @@ function RdvAdmin() {
           })
           .slice(0, 8);
         return (
-          <div onClick={() => { setSlotSel(null); setQCli(""); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={() => { setSlotSel(null); setQCli(""); setApManuel(""); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, maxWidth: 460, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <b style={{ fontFamily: FONT_TITLE, color: C.blueDk, fontSize: 17 }}>Créneau {slotSel.heure}</b>
-                <button onClick={() => { setSlotSel(null); setQCli(""); }} style={{ ...btn("#e8eff0"), color: C.muted, width: "auto", padding: "6px 12px" }}>Fermer</button>
+                <button onClick={() => { setSlotSel(null); setQCli(""); setApManuel(""); }} style={{ ...btn("#e8eff0"), color: C.muted, width: "auto", padding: "6px 12px" }}>Fermer</button>
               </div>
               <div style={{ fontSize: 13, color: C.muted, textTransform: "capitalize", marginBottom: 14 }}>
                 {new Date(slotSel.date + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {occ.length}/3
@@ -1272,7 +1277,7 @@ function RdvAdmin() {
                 <div style={{ marginBottom: 16 }}>
                   {occ.map((o, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: C.bg, borderRadius: 8, marginBottom: 6 }}>
-                      <span><b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>{o.client ? <span style={{ color: C.muted }}> · {o.client}</span> : ""}</span>
+                      <span><b style={{ color: C.blueDk }}>{numApp(o.appart)}</b>{o.client ? <span style={{ color: C.muted }}> · {o.client}</span> : ""}{o.manuel && <span style={{ color: C.gold, fontSize: 11, fontWeight: 700 }}> · saisie manuelle</span>}</span>
                       <button onClick={() => unbook(o.id)} style={{ ...btn("#e8eff0"), color: C.bad, width: "auto", padding: "5px 10px", fontSize: 12 }}>Retirer</button>
                     </div>
                   ))}
@@ -1284,21 +1289,32 @@ function RdvAdmin() {
               ) : complet ? (
                 <p style={{ color: C.muted, fontSize: 14 }}>Créneau complet (3/3).</p>
               ) : (
-                <div style={{ marginBottom: 14 }}>
-                  <span style={lbl}>Réserver pour un client</span>
-                  <input style={inp} placeholder="Rechercher (nom, email, appartement)…" value={qCli} onChange={(e) => setQCli(e.target.value)} />
-                  <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                    {matches.length === 0 && <span style={{ fontSize: 13, color: C.muted }}>Aucun séjour trouvé.</span>}
-                    {matches.map((s) => (
-                      <button key={s.id} disabled={dejaIds.has(s.id)} onClick={() => bookFor(s.id)}
-                        style={{ textAlign: "left", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.line}`, background: dejaIds.has(s.id) ? C.bg : "#fff", cursor: dejaIds.has(s.id) ? "default" : "pointer", fontSize: 13 }}>
-                        <b style={{ color: C.blueDk }}>{numApp(s.appart_nom)}</b> · {s.nom_client || s.email}
-                        {dejaIds.has(s.id) && <span style={{ color: C.ok, fontWeight: 700 }}> ✓ déjà sur ce créneau</span>}
-                      </button>
-                    ))}
+                <>
+                  <div style={{ marginBottom: 14 }}>
+                    <span style={lbl}>Réserver pour un client</span>
+                    <input style={inp} placeholder="Rechercher (nom, email, appartement)…" value={qCli} onChange={(e) => setQCli(e.target.value)} />
+                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                      {matches.length === 0 && <span style={{ fontSize: 13, color: C.muted }}>Aucun séjour trouvé.</span>}
+                      {matches.map((s) => (
+                        <button key={s.id} disabled={dejaIds.has(s.id)} onClick={() => bookFor(s.id)}
+                          style={{ textAlign: "left", padding: "9px 10px", borderRadius: 8, border: `1px solid ${C.line}`, background: dejaIds.has(s.id) ? C.bg : "#fff", cursor: dejaIds.has(s.id) ? "default" : "pointer", fontSize: 13 }}>
+                          <b style={{ color: C.blueDk }}>{numApp(s.appart_nom)}</b> · {s.nom_client || s.email}
+                          {dejaIds.has(s.id) && <span style={{ color: C.ok, fontWeight: 700 }}> ✓ déjà sur ce créneau</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 11, color: C.muted, margin: "8px 0 0" }}>La réservation remonte automatiquement sur la fiche du séjour.</p>
                   </div>
-                  <p style={{ fontSize: 11, color: C.muted, margin: "8px 0 0" }}>La réservation remonte automatiquement sur la fiche du séjour.</p>
-                </div>
+
+                  <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14, marginBottom: 14 }}>
+                    <span style={lbl}>Ou saisir un numéro d'appartement (sans séjour)</span>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <input style={{ ...inp, marginTop: 0, flex: 1 }} placeholder="ex. 509" value={apManuel} onChange={(e) => setApManuel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && bookManuel()} />
+                      <button onClick={bookManuel} disabled={!apManuel.trim()} style={{ ...btn(C.gold), width: "auto", padding: "0 16px", opacity: apManuel.trim() ? 1 : .5 }}>Réserver</button>
+                    </div>
+                    <p style={{ fontSize: 11, color: C.muted, margin: "8px 0 0" }}>Utile si le client n'a pas encore fait son EDL en ligne. Aucune fiche séjour n'est créée.</p>
+                  </div>
+                </>
               )}
 
               <button onClick={() => toggleCreneau(slotSel.date, slotSel.heure)}
