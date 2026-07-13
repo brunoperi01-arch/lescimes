@@ -889,6 +889,55 @@ function SejoursAdmin({ apparts }) {
   });
 
   if (!list) return <p style={{ color: C.muted }}>Chargement…</p>;
+
+  // Sépare les séjours actifs (à venir / en cours) des séjours terminés (archives)
+  const actifs = tries.filter((s) => statutSejour(s).label !== "Terminé");
+  const archives = tries.filter((s) => statutSejour(s).label === "Terminé");
+
+  const TableSejours = ({ liste }) => (
+    <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Statut", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
+          <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+        <tbody>{liste.map((s) => {
+          const st = statutSejour(s);
+          return (
+          <tr key={s.id}>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.nom_client}</td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+              {emailValide(s.email)
+                ? s.email
+                : <span style={{ color: C.bad, fontWeight: 700 }} title="Email invalide">{s.email || "—"} ⚠</span>}
+            </td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{fdate(s.date_arrivee)}</td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: st.color, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>{st.label}</span>
+              {!s.date_depart && (
+                <button onClick={() => cloturer(s)} style={{ ...btn(C.gold), padding: "4px 10px", fontSize: 12, marginTop: 6, display: "block" }}>Clôturer</button>
+              )}
+            </td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
+                <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "4px 10px", fontSize: 12 }} onClick={() => del(s)}>Suppr.</button>
+              </div>
+            </td>
+            <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
+              <select defaultValue="" onChange={(e) => reaffect(s.id, e.target.value)}
+                style={{ ...inp, width: 180, marginTop: 0 }}>
+                <option value="">— Changer —</option>
+                {(apparts || []).map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
+              </select>
+            </td>
+          </tr>
+          );
+        })}</tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
@@ -906,48 +955,21 @@ function SejoursAdmin({ apparts }) {
         </div>
       </div>
 
-      {tries.length === 0 ? <p style={{ color: C.muted }}>Aucun séjour.</p>
-        : <div style={{ overflowX: "auto", background: C.card, border: `1px solid ${C.line}`, borderRadius: 12 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr>{["Client", "Email", "Arrivée", "Départ", "Statut", "Appartement", "Fiche", "Réaffecter à"].map((h, i) =>
-                <th key={i} style={{ textAlign: "left", padding: 10, color: C.muted, borderBottom: `1px solid ${C.line}`, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
-              <tbody>{tries.map((s) => {
-                const st = statutSejour(s);
-                return (
-                <tr key={s.id}>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.nom_client}</td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    {emailValide(s.email)
-                      ? s.email
-                      : <span style={{ color: C.bad, fontWeight: 700 }} title="Email invalide">{s.email || "—"} ⚠</span>}
-                  </td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{fdate(s.date_arrivee)}</td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>{s.date_depart ? fdate(s.date_depart) : "—"}</td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: st.color, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap" }}>{st.label}</span>
-                    {!s.date_depart && (
-                      <button onClick={() => cloturer(s)} style={{ ...btn(C.gold), padding: "4px 10px", fontSize: 12, marginTop: 6, display: "block" }}>Clôturer</button>
-                    )}
-                  </td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}`, fontWeight: 700 }}>{s.appart_nom || "—"}</td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button style={{ ...btn(C.blue), padding: "4px 10px", fontSize: 12 }} onClick={() => openFiche(s.id)}>Voir</button>
-                      <button style={{ ...btn("#e8eff0"), color: C.bad, padding: "4px 10px", fontSize: 12 }} onClick={() => del(s)}>Suppr.</button>
-                    </div>
-                  </td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${C.bg}` }}>
-                    <select defaultValue="" onChange={(e) => reaffect(s.id, e.target.value)}
-                      style={{ ...inp, width: 180, marginTop: 0 }}>
-                      <option value="">— Changer —</option>
-                      {(apparts || []).map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
-                    </select>
-                  </td>
-                </tr>
-                );
-              })}</tbody>
-            </table>
-          </div>}
+      {actifs.length === 0 && archives.length === 0 && <p style={{ color: C.muted }}>Aucun séjour.</p>}
+
+      {actifs.length > 0 && <div style={{ marginBottom: 18 }}><TableSejours liste={actifs} /></div>}
+      {actifs.length === 0 && archives.length > 0 && <p style={{ color: C.muted, marginBottom: 18 }}>Aucun séjour actif.</p>}
+
+      {archives.length > 0 && (
+        <details>
+          <summary style={{ cursor: "pointer", color: C.muted, fontSize: 14, marginBottom: 10, fontWeight: 700 }}>
+            📁 Archives — {archives.length} séjour{archives.length > 1 ? "s" : ""} terminé{archives.length > 1 ? "s" : ""}
+          </summary>
+          <div style={{ marginTop: 10 }}>
+            <TableSejours liste={archives} />
+          </div>
+        </details>
+      )}
 
       {fiche && <FicheSejour fiche={fiche} onClose={() => setFiche(null)} />}
     </div>
